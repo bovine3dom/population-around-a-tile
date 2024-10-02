@@ -11,7 +11,7 @@ import * as h3 from 'h3-js'
 const start_pos = {...{x: 0.45, y: 51.47, z: 4}, ...Object.fromEntries(new URLSearchParams(window.location.hash.slice(1)))}
 const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://api.maptiler.com/maps/toner-v2/style.json?key=Y4leWPnhJFGnTFFk1cru', // only authorised for localhost
+    style: `https://api.maptiler.com/maps/toner-v2/style.json?key=${window.location.hostname == 'localhost' ? 'Y4leWPnhJFGnTFFk1cru' : 'L7Sd3jHa1AR1dtyLCTgq'}`, // only authorised for localhost / o.blanthorn.com
     center: [start_pos.x, start_pos.y],
     zoom: start_pos.z,
     bearing: 0,
