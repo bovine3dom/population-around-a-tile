@@ -8,7 +8,7 @@ import * as observablehq from './vendor/observablehq' // from https://observable
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
 
-const start_pos = {...{x: 0.45, y: 51.47, z: 4}, ...Object.fromEntries(new URLSearchParams(window.location.hash.slice(1)))}
+const start_pos = {...{x: 7.27, y: 43.7, z: 10}, ...Object.fromEntries(new URLSearchParams(window.location.hash.slice(1)))}
 const map = new maplibregl.Map({
     container: 'map',
     style: `https://api.maptiler.com/maps/toner-v2/style.json?key=${window.location.hostname == 'localhost' ? 'Y4leWPnhJFGnTFFk1cru' : 'L7Sd3jHa1AR1dtyLCTgq'}`, // only authorised for localhost / o.blanthorn.com
@@ -21,7 +21,7 @@ const map = new maplibregl.Map({
 let METADATA
 async function getMetadata() {
     if (!METADATA) {
-        METADATA = await (await fetch(`/data/JRC_POPULATION_2018_H3_by_rnd/meta.json`)).json()
+        METADATA = await (await fetch(`data/JRC_POPULATION_2018_H3_by_rnd/meta.json`)).json()
     }
     return METADATA
 }
@@ -190,7 +190,7 @@ const update = async () => {
         const key = `${g.res},${i}`
         try {
             if (!(data_chunks.has(key))) {
-                const url = `/data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_3=${i}/part0.arrow`
+                const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_3=${i}/part0.arrow`
                 const f = await fetch(url)
                 if (f.status == 404) {
                     continue
