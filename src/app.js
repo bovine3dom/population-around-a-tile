@@ -185,45 +185,36 @@ const update = async () => {
     const mini_s = unreliable_sort(s).slice(0,250)
     PARENTS = mini_s
 
-    const layers = []
-    for (const i of mini_s) {
+    const layers = (await Promise.all(mini_s.map(async i => {
         const key = `${g.res},${i}`
-        try {
-            if (!(data_chunks.has(key))) {
-                const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_3=${i}/part0.arrow`
-                const f = await fetch(url)
-                if (f.status == 404) {
-                    continue
-                }
-                data_chunks.set(key, (await aq.loadArrow(url)).objects())
-
-                layers.push(
-                    new H3HexagonLayer({
-                        id: key,
-                        ish3: true,
-                        data: data_chunks.get(key),
-                        extruded: false,
-                        stroked: false,
-                        getHexagon: d => d.index,
-                        getFillColor: d => getColour(d.value),
-                        getElevation: d => (1-d.value)*1000,
-                        elevationScale: 20,
-                        pickable: true
-                    })
-                )
+        if (!(data_chunks.has(key))) {
+            const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_3=${i}/part0.arrow`
+            const f = await fetch(url)
+            if (f.status == 404) {
+                return undefined
             }
-        } catch(e) {
-            console.log(e)
-        } finally {
-            continue
+            data_chunks.set(key, (await aq.loadArrow(url)).objects())
         }
-    }
+
+        return new H3HexagonLayer({
+            id: key,
+            ish3: true,
+            data: data_chunks.get(key),
+            extruded: false,
+            stroked: false,
+            getHexagon: d => d.index,
+            getFillColor: d => getColour(d.value),
+            getElevation: d => (1-d.value)*1000,
+            elevationScale: 20,
+            pickable: true
+        })
+    }))).filter(x=>x!=undefined)
 
     mapOverlay.setProps({layers})
     current_layers = layers
 
     // gc
-    const s_res = s.map(i => `${g.res},${i}`)
+    const s_res = mini_s.map(i => `${g.res},${i}`)
     for (const k of data_chunks.keys()) {
         if (!(s_res.includes(k))) {
             data_chunks.delete(k)
