@@ -2,6 +2,7 @@
 <html>
     <head>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/themes/light.css" />
+        <link rel="icon" href="cow.svg"/>
         <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/shoelace-autoloader.js"></script>
         <meta charset='UTF-8' />
         <title>Population around a tile</title>
@@ -33,8 +34,9 @@
     font-size: 8pt;
     border-radius: 0px;
 }
-
-
+:not(:defined) {
+      visibility: hidden;
+}
         </style>
 <!-- #legend { position: absolute; z-index: 1; background-color: rgba(255, 255, 255, 0.6); color: rgba(0, 0, 0, 0.6); top: 0; right: 0; font-family: "Helvetica Neue", "sans-serif"; font-size: 8pt; border-radius: 0px; } #legend text { stroke: white; stroke-width: 2px; paint-order: stroke; } -->
     </head>

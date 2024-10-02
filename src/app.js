@@ -14,6 +14,8 @@ const map = new maplibregl.Map({
     style: `https://api.maptiler.com/maps/toner-v2/style.json?key=${window.location.hostname == 'localhost' ? 'Y4leWPnhJFGnTFFk1cru' : 'L7Sd3jHa1AR1dtyLCTgq'}`, // only authorised for localhost / o.blanthorn.com
     center: [start_pos.x, start_pos.y],
     zoom: start_pos.z,
+    maxZoom: 18,
+    minZoom: 6.1, // todo: fix bugs instead of doing this
     bearing: 0,
     pitch: 0
 })
