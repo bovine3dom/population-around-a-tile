@@ -267,3 +267,10 @@ map.on('moveend', () => {
     }, 1000)
 })
 
+// nicked from https://phuoc.ng/collection/html-dom/change-the-favicon-dynamically-based-on-user-color-scheme-preference/
+const setFavicon = () => {
+        const favicon = document.querySelector('link[rel="icon"]');
+        favicon.href = (window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'cow.svg' : 'cow-light.svg'
+}
+setFavicon()
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setFavicon)
