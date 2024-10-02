@@ -53,21 +53,30 @@
                         <div id="waffle">
                             <pre>
 what does "density experienced by the median person" mean?
-    it is the density that the median person lives at
+    it is the density that the median person lives at, which is the density you should probably
+    care about if you care about how people live and behave. people care about people. so should you.
 
-what is density experienced by median person?
-    it is the density that the median person lives at
+what does "density experienced by the median piece of populated land" mean?
+    it's more like the boring normal measure of density of population/land area. but it excludes
+    totally unpopulated areas of land because it was like half a line of code less to do that
+    and people don't live in the sea.
 
 when i am zoomed out the numbers look dodgy?
     yeah, i'm not sure why. zoom in.
 
-i want it to be faster when the radius is big?
+when i move around the map why is it empty?
+    i coded the streaming part pretty lazily. just stop moving the map a second and it will load in.
+
+i want it to be faster when the radius is big
     buy a better computer
 
 why is only europe covered?
     i need a better computer or the time to think about how to do it without needing ~100GB of RAM
     to convert that global population layer tiff to h3. i started work on it here
     https://github.com/bovine3dom/grid2h3 but good luck deciphering it
+
+something else is broken and i want to complain
+    file an issue https://github.com/bovine3dom/population-around-a-tile
 
 how does it work?
     nerd. code at https://github.com/bovine3dom/population-around-a-tile
@@ -83,6 +92,12 @@ how does it work?
         - arquero is used to calculate the statistics on the selected tiles
 
         - shoelace is used for the UI
+
+why did you do this?
+    1) i like hexagons
+    2) i think people generally talk about population density in a pretty silly way
+        (yes i am talking about the "the uk is full" people when we have pretty low population density)
+    3) https://www.tomforth.co.uk/circlepopulations/ reminded me that toys are better than graphs for changing minds
 
                             </pre>
                         </div>

@@ -15,3 +15,5 @@ Prerequisites: yarn. A web browser
 0. `git clone`
 1. `yarn install`
 2. `yarn serve&; yarn watch`, open localhost:1983
+
+If you have updated src/app.js, remember to run `yarn build` and commit map/src.js or GitHub pages won't commit anything.
