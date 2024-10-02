@@ -94,48 +94,61 @@ function human(number){
 let lastDensity
 let lastLandDensity
 let lastPop
+let lastInfo
 const mapOverlay = new MapboxOverlay({
     interleaved: false,
-    onClick: (info, event) => {
-        if (info.layer == null) {
-            return
-        }
-        if (info.layer.id === 'selectedHex') {
-            mapOverlay.setProps({layers:[current_layers.filter(layer=>layer.id != 'selectedHex')]})
-        }
-        if (info.layer.props.ish3) {// && info.layer.id === 'H3HexagonLayer') {
-            const radius = document.getElementById("desired_radius").value
-            const parents = new Set(h3.gridDisk(info.object.index, radius).map(ind => h3.cellToParent(ind, 3))) // work out which tiles to look at
-            let filterTable = aq.table({index: h3.gridDisk(info.object.index, radius)})
-            let dt = aq.from(Array.from(parents).map(p=>data_chunks.get(`${h3.getResolution(info.object.index)},${p}`)).flat().filter(x=>x!==undefined)).semijoin(filterTable, 'index') // extract data relevant to those tiles
-            // validated: for all of UK, this gives us 2945 per km^2, which agrees with our previous work
-            dt = dt.orderby('real_value').derive({cumsum: aq.rolling(d => op.sum(d.real_value))}) // get cumulative sum
-                .derive({quantile: d => d.cumsum / op.sum(d.real_value)}) // normalise to get quantiles
-                .derive({median_dist: d => aq.op.abs(d.quantile - 0.5)}) // get distance to median
-                .orderby('median_dist') // sort by it
-            window.dt = dt
-            lastDensity = dt.get('real_value', 0)
-            lastLandDensity = dt.rollup({median: d => aq.op.median(d.real_value)}).get('median')
-            lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
-            document.getElementById("results_text").innerHTML = `
+    onClick: (info, event) => makeHighlight(info, undefined),
+    getTooltip,
+})
+
+function makeHighlight(info, force_radius){
+    lastInfo = info ?? lastInfo
+    if (info.layer == null) {
+        return
+    }
+    if (info.layer.id === 'selectedHex') {
+        mapOverlay.setProps({layers:[current_layers.filter(layer=>layer.id != 'selectedHex')]})
+    }
+    if (info.layer.props.ish3) {// && info.layer.id === 'H3HexagonLayer') {
+        const radius = force_radius ?? document.getElementById("desired_radius").value
+        const parents = new Set(h3.gridDisk(info.object.index, radius).map(ind => h3.cellToParent(ind, 3))) // work out which tiles to look at
+        let filterTable = aq.table({index: h3.gridDisk(info.object.index, radius)})
+        let dt = aq.from(Array.from(parents).map(p=>data_chunks.get(`${h3.getResolution(info.object.index)},${p}`)).flat().filter(x=>x!==undefined)).semijoin(filterTable, 'index') // extract data relevant to those tiles
+        // validated: for all of UK, this gives us 2945 per km^2, which agrees with our previous work
+        dt = dt.orderby('real_value').derive({cumsum: aq.rolling(d => op.sum(d.real_value))}) // get cumulative sum
+            .derive({quantile: d => d.cumsum / op.sum(d.real_value)}) // normalise to get quantiles
+            .derive({median_dist: d => aq.op.abs(d.quantile - 0.5)}) // get distance to median
+            .orderby('median_dist') // sort by it
+        window.dt = dt
+        lastDensity = dt.get('real_value', 0) * 9 / h3.getResolution(dt.get('index', 0))
+        lastLandDensity = dt.rollup({median: d => aq.op.median(d.real_value)}).get('median') * 9 / h3.getResolution(dt.get('index', 0))
+        lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
+        document.getElementById("results_text").innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(h3.getResolution(dt.get('index', 0)), 'km') * 2 * radius + 1)} km </p>
+            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please zoom to ~approx city level and click again</h3>"}
             <p>Population density experienced by median person: <b>${human(lastDensity)}</b> / km^2                                </p>
             <p>Population density experienced by median piece of populated land: <b>${human(lastLandDensity)}</b> / km^2                     </p>
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
             `
-            document.getElementById("settings").show()
-            mapOverlay.setProps({layers:[current_layers, getHighlightData(dt)]})
-            // hexagon diameter = 2x edge length => distance k -> 1 + k*edge_length*2
-            // agrees with tom forth pop around point numbers :D
-            // maybe worth swapping to https://human-settlement.emergency.copernicus.eu/ghs_pop2023.php anyway
+        document.getElementById("settings").show()
+        mapOverlay.setProps({layers:[current_layers, getHighlightData(dt)]})
+        // hexagon diameter = 2x edge length => distance k -> 1 + k*edge_length*2
+        // agrees with tom forth pop around point numbers :D
+        // maybe worth swapping to https://human-settlement.emergency.copernicus.eu/ghs_pop2023.php anyway
 
-        }
-    },
-    getTooltip,
-})
+    }
+}
 
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())
+
+document.getElementById("desired_radius").addEventListener("sl-change", e => {
+    if (lastInfo == undefined) {
+        return
+    }
+    const radius = e.target.value
+    makeHighlight(lastInfo, radius)
+})
 
 const what2grab = () => {
     let res, disk
@@ -171,6 +184,7 @@ const update = async () => {
     if (PARENTS.sort().join() == s.sort().join()) {
         return
     }
+    lastInfo = undefined // invalidate cache
 
     function unreliable_sort(a) {
         try {
