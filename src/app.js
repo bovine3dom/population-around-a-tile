@@ -186,7 +186,7 @@ const update = async () => {
     PARENTS = mini_s
 
     const layers = []
-    for (const i of s) {
+    for (const i of mini_s) {
         const key = `${g.res},${i}`
         try {
             if (!(data_chunks.has(key))) {
@@ -196,32 +196,26 @@ const update = async () => {
                     continue
                 }
                 data_chunks.set(key, (await aq.loadArrow(url)).objects())
+
+                layers.push(
+                    new H3HexagonLayer({
+                        id: key,
+                        ish3: true,
+                        data: data_chunks.get(key),
+                        extruded: false,
+                        stroked: false,
+                        getHexagon: d => d.index,
+                        getFillColor: d => getColour(d.value),
+                        getElevation: d => (1-d.value)*1000,
+                        elevationScale: 20,
+                        pickable: true
+                    })
+                )
             }
         } catch(e) {
             console.log(e)
         } finally {
             continue
-        }
-    }
-
-    for (const i of mini_s) {
-        const key = `${g.res},${i}`
-        if ((data_chunks.has(key))) {
-            // so here we want a second loop over grouped i of s that concats and makes layers
-            layers.push(
-                new H3HexagonLayer({
-                    id: key,
-                    ish3: true,
-                    data: data_chunks.get(key),
-                    extruded: false,
-                    stroked: false,
-                    getHexagon: d => d.index,
-                    getFillColor: d => getColour(d.value),
-                    getElevation: d => (1-d.value)*1000,
-                    elevationScale: 20,
-                    pickable: true
-                })
-            )
         }
     }
 
