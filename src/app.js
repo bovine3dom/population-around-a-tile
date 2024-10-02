@@ -14,7 +14,7 @@ const map = new maplibregl.Map({
     center: [start_pos.x, start_pos.y],
     zoom: start_pos.z,
     maxZoom: 18,
-    minZoom: 6.1, // todo: fix bugs instead of doing this
+    minZoom: navigator.userAgent.includes("Mobi") ? 10 : 6.1, // todo: fix bugs instead of doing this
     bearing: 0,
     pitch: 0
 })
