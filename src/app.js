@@ -247,8 +247,12 @@ window.update = update
 
 const params = new URLSearchParams(window.location.search)
 const l = document.getElementById("attribution")
-l.innerText = "© " + [params.get('c'), "MapTiler",  "OpenStreetMap contributors"].filter(x=>x !== null).join(" © ")
-l.insertBefore(observablehq.legend({color: colourRamp, title: params.get('t')}), l.firstChild)
+l.innerText = "© " + [params.get('c'), "Eurostat", "MapTiler", "OpenStreetMap contributors"].filter(x=>x !== null).join(" © ")
+getMetadata().then(d => {
+    const fmt = v => d['scale'][Object.keys(d['scale']).map(x => [x, Math.abs(x - v)]).sort((l,r)=>l[1] - r[1])[0][0]].toLocaleString()
+    const legend = observablehq.legend({color: colourRamp, title: "Population per km^2", tickFormat: fmt})
+    l.insertBefore(legend, l.firstChild)
+})
 
 map.on('moveend', () => {
     const pos = map.getCenter()
