@@ -1,6 +1,5 @@
 import {MapboxOverlay} from '@deck.gl/mapbox'
 import {H3HexagonLayer} from '@deck.gl/geo-layers'
-import {CSVLoader} from '@loaders.gl/csv'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
 import 'maplibre-gl/dist/maplibre-gl.css'

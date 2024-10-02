@@ -339,14 +339,6 @@
     "@loaders.gl/worker-utils" "4.2.1"
     "@types/crypto-js" "^4.0.2"
 
-"@loaders.gl/csv@^4.2.1":
-  version "4.2.1"
-  resolved "https://registry.yarnpkg.com/@loaders.gl/csv/-/csv-4.2.1.tgz#04c71f101631e9469f5fc1a40401e7141f0bae4d"
-  integrity sha512-jrEclxlwygr2uRlGYqiTXuuLxKdzEyNsUG7gzOliSv6kf81r7xHBclMOGQkL/eeIKKo0ij9ocNDb6QX+GQZD/Q==
-  dependencies:
-    "@loaders.gl/loader-utils" "4.2.1"
-    "@loaders.gl/schema" "4.2.1"
-
 "@loaders.gl/draco@4.2.1":
   version "4.2.1"
   resolved "https://registry.yarnpkg.com/@loaders.gl/draco/-/draco-4.2.1.tgz#e21f825d1b5f44df3401bca4d1a382551795d33c"
