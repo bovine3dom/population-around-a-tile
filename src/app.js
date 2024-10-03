@@ -14,7 +14,7 @@ const map = new maplibregl.Map({
     center: [start_pos.x, start_pos.y],
     zoom: start_pos.z,
     maxZoom: 18,
-    minZoom: navigator.userAgent.includes("Mobi") ? 10 : 6.1, // todo: fix bugs instead of doing this
+    minZoom: 1,
     bearing: 0,
     pitch: 0
 })
@@ -170,7 +170,19 @@ const what2grab = () => {
 let PARENTS = []
 const data_chunks = new Map();
 let current_layers = []
+const ALERT = document.getElementById("zoom-in-please")
+const MIN_ZOOM = navigator.userAgent.includes("Mobi") ? (navigator.userAgent.includes("Safari") ? 12 : 10) : 6.1
 const update = async () => {
+    if(map.getZoom() < MIN_ZOOM) {
+        try {
+            ALERT.toast()
+        } catch(e) {
+            ALERT.open = true
+        }
+        return
+    }
+    ALERT.open = false
+
     const pos = map.getCenter()
     const centreCell = h3.latLngToCell(pos.lat,pos.lng,3)
     const g = what2grab()

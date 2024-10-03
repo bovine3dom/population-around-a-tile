@@ -48,6 +48,10 @@
             <div id="attribution"></div>
         </div>
         <div id="widgets">
+            <sl-alert id="zoom-in-please" variant=danger>
+                <sl-icon slot="icon" name="exclamation-triangle"></sl-icon>
+                <b>Loading tiles disabled due to memory constraints, please zoom in</b>
+            </sl-alert>
             <!-- https://shoelace.style/getting-started/usage -->
             <sl-drawer contained="true" id="settings" label="Population around a tile" placement="top">
                 <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=200 step=1 value=15></sl-range>
@@ -60,9 +64,9 @@ what does "density experienced by the median person" mean?
     it is the density that the median person lives at, which is the density you should probably
     care about if you care about how people live and behave. people care about people. so should you.
 
-why can't i zoom out on my phone?
+why can't i use the map zoomed out on my phone?
     more zoomed out levels use a lot of memory. if you ask for the desktop site in your browser you'll
-    be able to zoom out more but your phone will probably kill the page.
+    be able to zoom out more but your phone will probably kill the page. especially on safari/ios.
 
 what does "density experienced by the median piece of populated land" mean?
     it's more like the boring normal measure of density of population/land area. but it excludes
@@ -76,7 +80,7 @@ when i move around the map why is it empty?
     i coded the streaming part pretty lazily. just stop moving the map a second and it will load in.
 
 i want it to be faster when the radius is big
-    buy a better computer
+    use a better computer like a desktop
 
 why is only europe covered?
     i need a better computer or the time to think about how to do it without needing ~100GB of RAM
