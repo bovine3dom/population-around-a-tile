@@ -1,5 +1,6 @@
 import {MapboxOverlay} from '@deck.gl/mapbox'
-import {H3HexagonLayer} from '@deck.gl/geo-layers'
+import {TileLayer, H3HexagonLayer} from '@deck.gl/geo-layers'
+import {BitmapLayer} from '@deck.gl/layers'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -169,6 +170,25 @@ const what2grab = () => {
     return {res, disk}
 }
 
+const choochoo = new TileLayer({
+    id: 'OpenRailwayMapLayer',
+    data: 'https://tiles.openrailwaymap.org/maxspeed/{z}/{x}/{y}.png',
+    maxZoom: 19,
+    minZoom: 0,
+
+    renderSubLayers: props => {
+        const {boundingBox} = props.tile;
+
+        return new BitmapLayer(props, {
+            data: null,
+            image: props.data,
+            bounds: [boundingBox[0][0], boundingBox[0][1], boundingBox[1][0], boundingBox[1][1]]
+        })
+    },
+    pickable: false
+})
+
+
 let PARENTS = []
 const data_chunks = new Map();
 let current_layers = []
@@ -239,6 +259,10 @@ const update = async () => {
         })
     }))).filter(x=>x!=undefined)
 
+    if (params.get('trains') !== null){
+        layers.push(choochoo)
+    }
+
     mapOverlay.setProps({layers})
     current_layers = layers
 
@@ -261,7 +285,7 @@ window.update = update
 
 const params = new URLSearchParams(window.location.search)
 const l = document.getElementById("attribution")
-l.innerText = "© " + [params.get('c'), "Eurostat", "MapTiler", "OpenStreetMap contributors"].filter(x=>x !== null).join(" © ")
+l.innerText = "© " + [params.get('c'), "Eurostat", "MapTiler", "OpenStreetMap contributors", params.get('trains') !== null ? "OpenRailwayMap" : null].filter(x=>x !== null).join(" © ")
 getMetadata().then(d => {
     const fmt = v => d['scale'][Object.keys(d['scale']).map(x => [x, Math.abs(x - v)]).sort((l,r)=>l[1] - r[1])[0][0]].toLocaleString()
     const legend = observablehq.legend({color: colourRamp, title: "Population per km^2", tickFormat: fmt})
