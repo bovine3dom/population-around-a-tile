@@ -126,7 +126,7 @@ function makeHighlight(info, force_radius){
         lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
         document.getElementById("results_text").innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(h3.getResolution(dt.get('index', 0)), 'km') * 2 * radius + 1)} km </p>
-            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please zoom to ~approx city level and click again</h3>"}
+            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please zoom to ~approx region level and click again</h3>"}
             <p>Population density experienced by median person: <b>${human(lastDensity)}</b> / km^2                                </p>
             <p>Population density experienced by median piece of populated land: <b>${human(lastLandDensity)}</b> / km^2                     </p>
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
@@ -156,10 +156,12 @@ const what2grab = () => {
     const z = Math.floor(map.getZoom())
     if (z < 6) {
         res = 5
-        disk = 15
+        disk = 14
     } else if (z < 8) {
-        res = 7
-        disk = 10
+        // res = 7
+        // disk = 10
+        res = 9
+        disk = 2
     } else if (z < 100) {
         res = 9
         disk = 1
@@ -171,7 +173,7 @@ let PARENTS = []
 const data_chunks = new Map();
 let current_layers = []
 const ALERT = document.getElementById("zoom-in-please")
-const MIN_ZOOM = navigator.userAgent.includes("Mobi") ? (navigator.userAgent.includes("Safari") ? 12 : 10) : 6.1
+const MIN_ZOOM = navigator.userAgent.includes("Mobi") ? (navigator.userAgent.includes("Safari") ? 12 : 10) : 2
 const update = async () => {
     if(map.getZoom() < MIN_ZOOM) {
         try {
