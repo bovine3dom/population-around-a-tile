@@ -77,7 +77,7 @@ function getTooltip({object}) {
     }
     return object && {
         // html: `<div>${(object.value).toPrecision(2)}</div>`,
-        html: `<div>density: ${lastDensity} population: ${lastPop} </div> ${Object.entries(object).map(toDivs).join(" ")}`,
+        html: `${lastDensity !== undefined ? "<div>density: " + lastDensity + " population: " + lastPop + "</div>" : ""} ${Object.entries(object).map(toDivs).join(" ")}`,
         style: {
             backgroundColor: '#fff',
             fontFamily: 'sans-serif',
