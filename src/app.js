@@ -17,7 +17,8 @@ const map = new maplibregl.Map({
     maxZoom: 18,
     minZoom: 1,
     bearing: 0,
-    pitch: 0
+    pitch: 0,
+    maxBounds: [[-45, 0], [70, 75]], // WSEN // bounds restriced to europe + canary islands
 })
 
 let METADATA
