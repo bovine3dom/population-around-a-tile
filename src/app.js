@@ -127,7 +127,7 @@ function makeHighlight(info, force_radius){
         lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
         document.getElementById("results_text").innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(h3.getResolution(dt.get('index', 0)), 'km') * 2 * radius + 1)} km </p>
-            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please zoom to ~approx region level and click again</h3>"}
+            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please " + (LOW_DATA ? "reload the page and allow high resolution data" : "zoom to ~approx region level and click again") + "</h3>"}
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km^2                                </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km^2                     </p>
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
@@ -152,6 +152,8 @@ document.getElementById("desired_radius").addEventListener("sl-change", e => {
     makeHighlight(lastInfo, radius)
 })
 
+let LOW_DATA = false
+
 const what2grab = () => {
     let res, disk
     const z = Math.floor(map.getZoom())
@@ -166,6 +168,9 @@ const what2grab = () => {
     } else if (z < 100) {
         res = 9
         disk = 1
+    }
+    if (LOW_DATA) {
+        res = Math.min(res, 7)
     }
     return {res, disk}
 }
@@ -194,7 +199,16 @@ const data_chunks = new Map();
 let current_layers = []
 const ALERT = document.getElementById("zoom-in-please")
 const MIN_ZOOM = navigator.userAgent.includes("Mobi") ? (navigator.userAgent.includes("Safari") ? 12 : 10) : 2
+const IS_MOBILE = navigator.userAgent.includes("Mobi")
+let LOW_DATA_ASKED = false
 const update = async () => {
+    if (IS_MOBILE && !LOW_DATA_ASKED && !LOW_DATA) {
+        // use a dialog to ask user if they want to use LOW_DATA or not
+        if (!window.confirm("Phone detected: click 'OK' to use high resolution data (~300MB per session) or click 'cancel' to use low resolution data (~50MB per session)")) {
+            LOW_DATA = true
+        }
+        LOW_DATA_ASKED = true
+    }
     if(map.getZoom() < MIN_ZOOM) {
         try {
             ALERT.toast()
