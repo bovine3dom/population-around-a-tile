@@ -125,10 +125,15 @@ function makeHighlight(info, force_radius){
         window.dt = dt
         lastDensity = dt.get('real_value', 0) * 9 / h3.getResolution(dt.get('index', 0))
         lastLandDensity = dt.rollup({median: d => aq.op.median(d.real_value)}).get('median') * 9 / h3.getResolution(dt.get('index', 0))
-        lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
+
+        // check if population column exists
+        if ("population" in dt.columnNames()) {
+            lastPop = Number(dt.rollup({total: d => aq.op.sum(d.population)}).get('total')) // returns bigint otherwise
+        } else {
+            lastPop = dt.rollup({total: d => aq.op.mean(d.real_value)}).get('total') * dt.size * h3.getHexagonAreaAvg(h3.getResolution(dt.get('index', 0)), 'km2')
+        }
         document.getElementById("results_text").innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(h3.getResolution(dt.get('index', 0)), 'km') * 2 * radius + 1)} km </p>
-            ${h3.getResolution(dt.get('index', 0)) == 9 ? "" : "<h3><b>Warning:</b> the numbers are broken at this zoom level, please " + (LOW_DATA ? "reload the page and allow high resolution data" : "zoom to ~approx region level and click again") + "</h3>"}
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km^2                                </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km^2                     </p>
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
@@ -161,11 +166,12 @@ const what2grab = () => {
     if (z < 6) {
         res = 5
         disk = 14
+    } else if (z < 7) {
+        res = 7
+        disk = 6
     } else if (z < 8) {
-        // res = 7
-        // disk = 10
-        res = 9
-        disk = 2
+        res = 7
+        disk = 4
     } else if (z < 100) {
         res = 9
         disk = 1
