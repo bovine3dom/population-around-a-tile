@@ -48,10 +48,6 @@
             <div id="attribution"></div>
         </div>
         <div id="widgets">
-            <sl-alert id="zoom-in-please" variant=danger>
-                <sl-icon slot="icon" name="exclamation-triangle"></sl-icon>
-                <b>Loading tiles disabled due to memory constraints, please zoom in</b>
-            </sl-alert>
             <!-- https://shoelace.style/getting-started/usage -->
             <sl-drawer contained="true" id="settings" label="Population around a tile" placement="top">
                 <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=200 step=1 value=15></sl-range>

@@ -159,7 +159,6 @@ document.getElementById("desired_radius").addEventListener("sl-change", e => {
 })
 
 let LOW_DATA = false
-
 const what2grab = () => {
     let res, disk
     const z = Math.floor(map.getZoom())
@@ -177,7 +176,7 @@ const what2grab = () => {
         disk = 1
     }
     if (LOW_DATA) {
-        res = Math.min(res, 7)
+        res = Math.max(Math.min(res - 2, 7), 5)
     }
     return {res, disk}
 }
@@ -204,8 +203,6 @@ const choochoo = new TileLayer({
 let PARENTS = []
 const data_chunks = new Map();
 let current_layers = []
-const ALERT = document.getElementById("zoom-in-please")
-const MIN_ZOOM = navigator.userAgent.includes("Mobi") ? (navigator.userAgent.includes("Safari") ? 12 : 10) : 2
 const IS_MOBILE = navigator.userAgent.includes("Mobi")
 let LOW_DATA_ASKED = false
 const update = async () => {
@@ -216,15 +213,6 @@ const update = async () => {
         }
         LOW_DATA_ASKED = true
     }
-    if(map.getZoom() < MIN_ZOOM) {
-        try {
-            ALERT.toast()
-        } catch(e) {
-            ALERT.open = true
-        }
-        return
-    }
-    ALERT.open = false
 
     const pos = map.getCenter()
     const centreCell = h3.latLngToCell(pos.lat,pos.lng,3)
