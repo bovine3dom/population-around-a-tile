@@ -91,7 +91,7 @@ function getTooltip({object}) {
 }
 // df.derive({h3_5: aq.escape(d => h3.cellToParent(d.index, 5))}).groupby('h3_5').rollup({value: d => ag.op.mean(d.value)}).objects() // todo: aggregate at sensible zoom level. with some occlusion culling? aq.addFunction is roughly just as slow so don't bother
 function human(number){
-    return parseFloat(number.toPrecision(3)).toLocaleString()
+    return parseFloat(number.toPrecision(2)).toLocaleString()
 }
 
 let lastDensity
