@@ -106,6 +106,7 @@ const mapOverlay = new MapboxOverlay({
 
 function makeHighlight(info, force_radius){
     lastInfo = info ?? lastInfo
+    console.log(info)
     if (info.layer == null) {
         return
     }
@@ -114,16 +115,23 @@ function makeHighlight(info, force_radius){
     }
     if (info.layer.props.ish3) {// && info.layer.id === 'H3HexagonLayer') {
         const radius = force_radius ?? document.getElementById("desired_radius").value
-        const parents = new Set(h3.gridDisk(info.object.index, radius).map(ind => h3.cellToParent(ind, 3))) // work out which tiles to look at
+        const res = h3.getResolution(info.object.index)
+        const parents = new Set(h3.gridDisk(info.object.index, radius).map(ind => h3.cellToParent(ind, res2parent(res)))) // work out which tiles to look at
         let filterTable = aq.table({index: h3.gridDisk(info.object.index, radius)})
         let dt = aq.from(Array.from(parents).map(p=>data_chunks.get(`${h3.getResolution(info.object.index)},${p}`)).flat().filter(x=>x!==undefined)).semijoin(filterTable, 'index') // extract data relevant to those tiles
         // validated: for all of UK, this gives us 2945 per km^2, which agrees with our previous work
         dt = dt.orderby('real_value').derive({cumsum: aq.rolling(d => op.sum(d.real_value))}) // get cumulative sum
             .derive({quantile: d => d.cumsum / op.sum(d.real_value)}) // normalise to get quantiles
-            .derive({median_dist: d => aq.op.abs(d.quantile - 0.5)}) // get distance to median
+            .derive({
+                median_dist: d => aq.op.abs(d.quantile - 0.5),
+                q75_dist: d => aq.op.abs(d.quantile - 0.75),
+                q25_dist: d => aq.op.abs(d.quantile - 0.25),
+            }) // get distance to median
             .orderby('median_dist') // sort by it
         window.dt = dt
         lastDensity = dt.get('real_value', 0) * 9 / h3.getResolution(dt.get('index', 0))
+        const last75Density = dt.orderby('q75_dist').get('real_value', 0) * 9 / h3.getResolution(dt.get('index', 0))
+        const last25Density = dt.orderby('q25_dist').get('real_value', 0) * 9 / h3.getResolution(dt.get('index', 0))
         lastLandDensity = dt.rollup({median: d => aq.op.median(d.real_value)}).get('median') * 9 / h3.getResolution(dt.get('index', 0))
 
         // check if population column exists
@@ -134,9 +142,9 @@ function makeHighlight(info, force_radius){
         }
         document.getElementById("results_text").innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(h3.getResolution(dt.get('index', 0)), 'km') * 2 * radius + 1)} km </p>
-            <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km^2                                </p>
-            <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km^2                     </p>
-            <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
+            <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
+            <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
+            <p>Total population: <b>${human(lastPop)} ${res == 5 ? '<sl-tag variant="warning"><sl-icon name="exclamation-triangle"></sl-icon>&nbsp; ~2x overestimate at this zoom level</sl-tag>' : ''}</b>                                                                          </p>
             `
         document.getElementById("settings").show()
         mapOverlay.setProps({layers:[current_layers, getHighlightData(dt)]})
@@ -164,7 +172,7 @@ const what2grab = () => {
     const z = Math.floor(map.getZoom())
     if (z < 6) {
         res = 5
-        disk = 14
+        disk = 5
     } else if (z < 7) {
         res = 7
         disk = 6
@@ -178,7 +186,18 @@ const what2grab = () => {
     if (LOW_DATA) {
         res = Math.max(Math.min(res - 2, 7), 5)
     }
-    return {res, disk}
+    return {res, disk, parent_res: res2parent(res)}
+}
+
+const res2parent = res => {
+    if (res == 5) {
+        return 1
+    } else if (res == 7) {
+        return 3
+    } else if (res == 9) {
+        return 3
+    }
+    throw new Error("unknown parent resolution")
 }
 
 const choochoo = new TileLayer({
@@ -215,8 +234,8 @@ const update = async () => {
     }
 
     const pos = map.getCenter()
-    const centreCell = h3.latLngToCell(pos.lat,pos.lng,3)
     const g = what2grab()
+    const centreCell = h3.latLngToCell(pos.lat,pos.lng,g.parent_res)
     const s2 = h3.gridDisk(centreCell, g.disk) // why did i call it s2? that's the google index
     const meta = await getMetadata()
     const s = []
@@ -246,7 +265,7 @@ const update = async () => {
     const layers = (await Promise.all(mini_s.map(async i => {
         const key = `${g.res},${i}`
         if (!(data_chunks.has(key))) {
-            const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_3=${i}/part0.arrow`
+            const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_parent=${i}/part0.arrow`
             const f = await fetch(url)
             if (f.status == 404) {
                 return undefined
