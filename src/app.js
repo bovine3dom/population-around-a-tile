@@ -106,7 +106,6 @@ const mapOverlay = new MapboxOverlay({
 
 function makeHighlight(info, force_radius){
     lastInfo = info ?? lastInfo
-    console.log(info)
     if (info.layer == null) {
         return
     }
