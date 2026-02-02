@@ -116,7 +116,9 @@ export function getHexagonResolution(
   const latitudeScaleFactor = Math.log(1 / Math.cos((Math.PI * viewport.latitude) / 180));
 
   // Clip and bias
-  return Math.max(0, Math.floor(hexagonScaleFactor + latitudeScaleFactor - BIAS));
+  const vanilla_zoom = Math.max(0, Math.floor(hexagonScaleFactor + latitudeScaleFactor - BIAS));
+  // we only want odd zooms
+  return Math.max(0, Math.floor((vanilla_zoom + 1) / 2) * 2 - 1);
 }
 
 export default class H3Tileset2D extends Tileset2D {
