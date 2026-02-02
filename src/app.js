@@ -106,7 +106,7 @@ const mapOverlay = new MapboxOverlay({
     layers: [
         new ArrowH3TileLayer({
             id: 'H3TileLayer',
-            data: 'data/JRC_POPULATION_2018_H3_by_rnd',
+            data: 'data/JRC_POPULATION_2018_H3_tiles',
             pickable: true
         })
     ]

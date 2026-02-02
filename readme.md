@@ -25,9 +25,7 @@ somehow foursquare managed to trademark 'hex tiles', absolutely insane. i wonder
 
 anyway need to formalise the format spec etc.
 
-at the moment it's /res={res}/h3_parent={string_index}/part0.arrow, where h3_parent is the resolution specified, and part0.arrow is an uncompressed arrow file of index, value.
-
-atm index is a string but it'll be uint64 soon
+at the moment it's /res={res}/h3_parent={string_index}/part0.arrow, where h3_parent is the resolution specified, and part0.arrow is an uncompressed arrow file of index: uint64, value: float 0-1.
 
 todo:
 
@@ -35,5 +33,6 @@ todo:
 - make getFillColor etc configurable
 - support template string for url
 - add meta.json for valid resolutions rather than hardcoding odd ones? maybe we can/should adapt map style.json?
+- investigate 'z-fighting' glitches when moving
 
 - make layers clickable again

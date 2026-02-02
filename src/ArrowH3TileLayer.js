@@ -38,7 +38,7 @@ export class ArrowH3TileLayer extends TileLayer {
       id: `${props.id}-${tile.index.i}`,
       data: { length: values.length }, // ?
       
-      getHexagon: (d, { index }) => { return h3Indices.at(index)},//.toString(16),
+      getHexagon: (d, { index }) => { return h3Indices.at(index).toString(16) },
       
       getFillColor: (d, { index }) => getColour(values.at(index)),
       // getFillColor: (d, { index }) => { console.log(d); return [0, 0, 0] } ,
