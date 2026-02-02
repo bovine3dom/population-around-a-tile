@@ -7,6 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import * as observablehq from './vendor/observablehq' // from https://observablehq.com/@d3/color-legend
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
+import {ArrowH3TileLayer} from './ArrowH3TileLayer'
 
 const start_pos = {...{x: 7.27, y: 43.7, z: 10}, ...Object.fromEntries(new URLSearchParams(window.location.hash.slice(1)))}
 const map = new maplibregl.Map({
@@ -102,6 +103,13 @@ const mapOverlay = new MapboxOverlay({
     interleaved: false,
     onClick: (info, event) => makeHighlight(info, undefined),
     getTooltip,
+    layers: [
+        new ArrowH3TileLayer({
+            id: 'H3TileLayer',
+            data: 'data/JRC_POPULATION_2018_H3_by_rnd',
+            pickable: true
+        })
+    ]
 })
 
 function makeHighlight(info, force_radius){
@@ -223,92 +231,92 @@ const data_chunks = new Map();
 let current_layers = []
 const IS_MOBILE = navigator.userAgent.includes("Mobi")
 let LOW_DATA_ASKED = false
-const update = async () => {
-    if (IS_MOBILE && !LOW_DATA_ASKED && !LOW_DATA) {
-        // use a dialog to ask user if they want to use LOW_DATA or not
-        if (!window.confirm("Phone detected: click 'OK' to use high resolution data (~300MB per session) or click 'cancel' to use low resolution data (~50MB per session)")) {
-            LOW_DATA = true
-        }
-        LOW_DATA_ASKED = true
-    }
+// const update = async () => {
+//     if (IS_MOBILE && !LOW_DATA_ASKED && !LOW_DATA) {
+//         // use a dialog to ask user if they want to use LOW_DATA or not
+//         if (!window.confirm("Phone detected: click 'OK' to use high resolution data (~300MB per session) or click 'cancel' to use low resolution data (~50MB per session)")) {
+//             LOW_DATA = true
+//         }
+//         LOW_DATA_ASKED = true
+//     }
 
-    const pos = map.getCenter()
-    const g = what2grab()
-    const centreCell = h3.latLngToCell(pos.lat,pos.lng,g.parent_res)
-    const s2 = h3.gridDisk(centreCell, g.disk) // why did i call it s2? that's the google index
-    const meta = await getMetadata()
-    const s = []
-    for (const i of s2) {
-        if ((meta.valid_parents[g.res].includes(i))){
-            s.push(i)
-        }
-    }
-    if (PARENTS.sort().join() == s.sort().join()) {
-        return
-    }
-    lastInfo = undefined // invalidate cache
+//     const pos = map.getCenter()
+//     const g = what2grab()
+//     const centreCell = h3.latLngToCell(pos.lat,pos.lng,g.parent_res)
+//     const s2 = h3.gridDisk(centreCell, g.disk) // why did i call it s2? that's the google index
+//     const meta = await getMetadata()
+//     const s = []
+//     for (const i of s2) {
+//         if ((meta.valid_parents[g.res].includes(i))){
+//             s.push(i)
+//         }
+//     }
+//     if (PARENTS.sort().join() == s.sort().join()) {
+//         return
+//     }
+//     lastInfo = undefined // invalidate cache
 
-    function unreliable_sort(a) {
-        try {
-            return a.sort((l,r) => h3.gridDistance(l,centreCell) - h3.gridDistance(r,centreCell)).slice(0,250)
-        } catch(e) {
-            console.warn(e)
-            return a
-        }
-    }
+//     function unreliable_sort(a) {
+//         try {
+//             return a.sort((l,r) => h3.gridDistance(l,centreCell) - h3.gridDistance(r,centreCell)).slice(0,250)
+//         } catch(e) {
+//             console.warn(e)
+//             return a
+//         }
+//     }
     
-    const max_layers = 250 // deck doesn't like more than 255
-    const mini_s = unreliable_sort(s).slice(0,250)
-    PARENTS = mini_s
+//     const max_layers = 250 // deck doesn't like more than 255
+//     const mini_s = unreliable_sort(s).slice(0,250)
+//     PARENTS = mini_s
 
-    const layers = (await Promise.all(mini_s.map(async i => {
-        const key = `${g.res},${i}`
-        if (!(data_chunks.has(key))) {
-            const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_parent=${i}/part0.arrow`
-            const f = await fetch(url)
-            if (f.status == 404) {
-                return undefined
-            }
-            data_chunks.set(key, (await aq.loadArrow(url)).objects())
-        }
+//     const layers = (await Promise.all(mini_s.map(async i => {
+//         const key = `${g.res},${i}`
+//         if (!(data_chunks.has(key))) {
+//             const url = `data/JRC_POPULATION_2018_H3_by_rnd/res=${g.res}/h3_parent=${i}/part0.arrow`
+//             const f = await fetch(url)
+//             if (f.status == 404) {
+//                 return undefined
+//             }
+//             data_chunks.set(key, (await aq.loadArrow(url)).objects())
+//         }
 
-        return new H3HexagonLayer({
-            id: key,
-            ish3: true,
-            data: data_chunks.get(key),
-            extruded: false,
-            stroked: false,
-            getHexagon: d => d.index,
-            getFillColor: d => getColour(d.value),
-            getElevation: d => (1-d.value)*1000,
-            elevationScale: 20,
-            pickable: true
-        })
-    }))).filter(x=>x!=undefined)
+//         return new H3HexagonLayer({
+//             id: key,
+//             ish3: true,
+//             data: data_chunks.get(key),
+//             extruded: false,
+//             stroked: false,
+//             getHexagon: d => d.index,
+//             getFillColor: d => getColour(d.value),
+//             getElevation: d => (1-d.value)*1000,
+//             elevationScale: 20,
+//             pickable: true
+//         })
+//     }))).filter(x=>x!=undefined)
 
-    if (params.get('trains') !== null){
-        layers.push(choochoo)
-    }
+//     if (params.get('trains') !== null){
+//         layers.push(choochoo)
+//     }
 
-    mapOverlay.setProps({layers})
-    current_layers = layers
+//     mapOverlay.setProps({layers})
+//     current_layers = layers
 
-    // gc
-    const s_res = mini_s.map(i => `${g.res},${i}`)
-    for (const k of data_chunks.keys()) {
-        if (!(s_res.includes(k))) {
-            data_chunks.delete(k)
-        }
-    }
-}
-update()
+//     // gc
+//     const s_res = mini_s.map(i => `${g.res},${i}`)
+//     for (const k of data_chunks.keys()) {
+//         if (!(s_res.includes(k))) {
+//             data_chunks.delete(k)
+//         }
+//     }
+// }
+// update()
 
 
 window.d3 = d3
 window.observablehq = observablehq
 window.aq = aq
 window.h3 = h3
-window.update = update
+// window.update = update
 
 const params = new URLSearchParams(window.location.search)
 const l = document.getElementById("attribution")
@@ -327,7 +335,7 @@ map.on('moveend', () => {
         const npos = map.getCenter()
         if ((pos.lng == npos.lng) && (pos.lat == npos.lat)) {
             console.log("updating")
-            update()
+            // update()
         }
     }, 1000)
 })
