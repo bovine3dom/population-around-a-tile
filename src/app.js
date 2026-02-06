@@ -95,6 +95,25 @@ function human(number){
     return parseFloat(number.toPrecision(2)).toLocaleString()
 }
 
+function chQuery(query) {
+    return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format arrow settings output_format_arrow_compression_method = 'none'")}`, {
+        headers: new Headers({
+            'Authorization': `Basic ${btoa(username + ':' + password)}`
+        })
+    });
+}
+
+const chquerygen = ({h3Index, resolution}) => {
+    // count returns bigints which break things
+    return chQuery(`
+        select avg(crow_km) value, geoToH3(stop_lat, stop_lon, ${resolution + 3}) index
+        --select count()+.000001 value, geoToH3(stop_lat, stop_lon, ${resolution + 2}) index
+        from transitous_everything_20260117_stop_statistics_unmerged3
+        where h3ToParent(index, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
+        group by index
+    `)
+}
+
 let lastDensity
 let lastLandDensity
 let lastPop
@@ -106,7 +125,8 @@ const mapOverlay = new MapboxOverlay({
     layers: [
         new ArrowH3TileLayer({
             id: 'H3TileLayer',
-            data: 'data/JRC_POPULATION_2018_H3_tiles',
+            // data: ({h3Index, resolution}) => fetch(`data/JRC_POPULATION_2018_H3_tiles/res=${resolution}/h3_parent=${h3Index}/part0.arrow`),
+            data: chquerygen,
             pickable: true
         })
     ]
