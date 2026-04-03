@@ -32,8 +32,11 @@ function ramp(color: d3.ScaleSequential<string>, n = 256): HTMLCanvasElement {
     canvas.width = n
     canvas.height = 1
     const context = canvas.getContext('2d')!
+    const domain = color.domain() as number[]
+    const min = domain[0] ?? 0
+    const max = domain[1] ?? 1
     for (let i = 0; i < n; ++i) {
-        context.fillStyle = color(i / (n - 1))
+        context.fillStyle = color(min + (max - min) * i / (n - 1))
         context.fillRect(i, 0, 1, 1)
     }
     return canvas

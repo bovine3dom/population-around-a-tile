@@ -75,7 +75,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, ${resolution + 2}) index, sum(population) value
+      select h3ToParent(h3, least(${resolution + 2}, h3GetResolution(h3))) index, sum(population) value
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -99,20 +99,13 @@ function updateLegend() {
   colourRamp.domain([q01, q99])
 
   // Re-render legend
-  getMetadata().then((d) => {
-    const fmt = (v: number) =>
-      d['scale'][
-        (Object.keys(d['scale'])
-          .map((x) => [x, Math.abs(Number(x) - v)] as [string, number])
-          .sort((a, b) => a[1] - b[1])[0] as [string, number])[0]
-      ].toLocaleString()
+  const fmt = d3.format('.0f')
 
-    if (legendElement) {
-      legendElement.remove()
-    }
-    legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km^2', tickFormat: fmt })
-    attributionEl.insertBefore(legendElement, attributionEl.firstChild)
-  })
+  if (legendElement) {
+    legendElement.remove()
+  }
+  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km^2', tickFormat: fmt })
+  attributionEl.insertBefore(legendElement, attributionEl.firstChild)
 
   // Force re-render of hex layers by updating the colorDomain trigger
   mapOverlay.setProps({
@@ -123,7 +116,7 @@ function updateLegend() {
       pickable: true,
       getFillColor: getColour,
       colorDomain: [q01, q99],
-      onDataChange: (layer: ArrowH3TileLayer) => {
+      onDataChange: () => {
         console.log(`[datachange] tiles loaded: ${tileCache.size}`)
         updateLegend()
       },
