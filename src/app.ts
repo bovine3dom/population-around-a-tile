@@ -8,6 +8,8 @@ import * as observablehq from './vendor/observablehq'
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
 import { ArrowH3TileLayer, tileCache, type ArrowH3TileLayerProps } from './ArrowH3TileLayer'
+// @ts-expect-error no types
+import { Chart } from 'frappe-charts/dist/frappe-charts.esm'
 
 const username = 'public_web';
 const password = 'a2hkayBzZGlsO2RqIHNsayBsYWpzZCBmbGogc2Rsa2og';
@@ -329,6 +331,35 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
 
     console.log('[makeHighlight] ring density quantiles (pop-weighted, per km²):')
     console.table(ringStats)
+
+    // Render chart
+    const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
+    const labels = ringStats.map(r => `${(r.distance * edgeKm * 2).toFixed(1)} km`)
+    const chartEl = document.getElementById('ring_chart')!
+    chartEl.innerHTML = ''
+    new Chart(chartEl, {
+      data: {
+        labels,
+        datasets: [
+          { name: 'Median', values: ringStats.map(r => r.median) },
+          { name: '25th percentile', values: ringStats.map(r => r.q25) },
+          { name: '75th percentile', values: ringStats.map(r => r.q75) },
+        ],
+      },
+      type: 'line',
+      height: 300,
+      colors: ['#ff69b4', '#ffa500', '#41c6ff'],
+      axisOptions: {
+        xIsSeries: true,
+        xAxisMode: 'tick',
+        yAxisMode: 'span',
+      },
+      lineOptions: {
+        hideLine: false,
+        regionFill: false,
+        dotSize: 4,
+      },
+    })
 
     document.getElementById('results_text')!.innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
