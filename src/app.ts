@@ -174,6 +174,17 @@ let lastLandDensity: number | undefined
 let lastPop: number | undefined
 let lastInfo: any
 
+// Chart state: array of { city, edgeKm, ringStats, centerValue }
+let chartLocations: {
+  city: string
+  edgeKm: number
+  ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[]
+  centerValue: number
+  color: string
+}[] = []
+
+const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db', '#00ced1', '#ffd700']
+
 const h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
   // @ts-expect-error custom data function
@@ -184,9 +195,15 @@ const h3Layer = new ArrowH3TileLayer({
   onDataChange: throttledUpdateLegend,
 })
 
+// Capture shift state at mousedown time (before keyup can interfere)
+let clickShiftState = false
+document.addEventListener('mousedown', (e) => { clickShiftState = e.shiftKey })
+
 const mapOverlay = new MapboxOverlay({
   interleaved: false,
-  onClick: (info: any) => makeHighlight(info, undefined),
+  onClick: (info: any) => {
+    makeHighlight(info, undefined, clickShiftState)
+  },
   getTooltip: (info: any) => {
     if (info.index === undefined || !info.sourceTile?.content?.data) return null
 
@@ -222,7 +239,7 @@ const getHighlightData = (df: any) =>
     pickable: true,
   })
 
-function makeHighlight(info: any | undefined, force_radius: number | undefined) {
+function makeHighlight(info: any | undefined, force_radius: number | undefined, append = false) {
   lastInfo = info ?? lastInfo
   if (info?.layer == null) {
     return
@@ -334,68 +351,20 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
     console.log('[makeHighlight] ring density quantiles (pop-weighted, per km²):')
     console.table(ringStats)
 
-    // Render symmetric chart around 0
     const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
-    const mirroredLabels: string[] = []
-    const mirroredMedian: number[] = []
-    const mirroredQ25: number[] = []
-    const mirroredQ75: number[] = []
-
-    // Negative side (reverse order, include all rings)
-    for (let i = ringStats.length - 1; i >= 0; i--) {
-      const r = ringStats[i]
-      mirroredLabels.push(`-${(r.distance * edgeKm * 2).toFixed(1)}`)
-      mirroredMedian.push(r.median)
-      mirroredQ25.push(r.q25)
-      mirroredQ75.push(r.q75)
-    }
-    // Center (ring 0 - the clicked hexagon)
-    const centerValue = (dt.get('value', 0) as number) * scale
-    mirroredLabels.push('0')
-    mirroredMedian.push(centerValue)
-    mirroredQ25.push(centerValue)
-    mirroredQ75.push(centerValue)
-    // Positive side (skip ring 0 to avoid duplicate)
-    for (let i = 0; i < ringStats.length; i++) {
-      const r = ringStats[i]
-      if (r.distance === 0) continue
-      mirroredLabels.push(`${(r.distance * edgeKm * 2).toFixed(1)}`)
-      mirroredMedian.push(r.median)
-      mirroredQ25.push(r.q25)
-      mirroredQ75.push(r.q75)
-    }
-
-    // Get city label for chart title
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
     const centerLon = h3.cellToLatLng(clickedIndex)[1]
     const cityLabel = findClosestCity(centerLat, centerLon)
+    const centerValue = (dt.get('value', 0) as number) * scale
 
-    const chartEl = document.getElementById('ring_chart')!
-    chartEl.innerHTML = ''
-    new Chart(chartEl, {
-      data: {
-        labels: mirroredLabels,
-        datasets: [
-          { name: 'Median', values: mirroredMedian },
-          { name: '25th percentile', values: mirroredQ25 },
-          { name: '75th percentile', values: mirroredQ75 },
-        ],
-      },
-      type: 'line',
-      height: 300,
-      title: cityLabel,
-      colors: ['#ff69b4', '#ffa500', '#41c6ff'],
-      axisOptions: {
-        xIsSeries: true,
-        xAxisMode: 'tick',
-        yAxisMode: 'span',
-      },
-      lineOptions: {
-        hideLine: false,
-        regionFill: false,
-        dotSize: 4,
-      },
-    })
+    // Build or append chart data
+    if (append) {
+      chartLocations.push({ city: cityLabel, edgeKm, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length] })
+    } else {
+      chartLocations = [{ city: cityLabel, edgeKm, ringStats, centerValue, color: COLORS[0] }]
+    }
+
+    renderChart()
 
     document.getElementById('results_text')!.innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
@@ -406,6 +375,96 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
     ;(document.getElementById('settings') as any).show()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(dt)] })
   }
+}
+
+function renderChart() {
+  if (chartLocations.length === 0) return
+
+  // Build symmetric labels from the first location
+  const first = chartLocations[0]
+  const edgeKm = first.edgeKm
+  const maxDist = first.ringStats.length > 0 ? first.ringStats[first.ringStats.length - 1].distance : 0
+
+  const mirroredLabels: string[] = []
+  for (let d = maxDist; d >= 1; d--) {
+    mirroredLabels.push(`-${(d * edgeKm * 2).toFixed(1)}`)
+  }
+  mirroredLabels.push('0')
+  for (let d = 1; d <= maxDist; d++) {
+    mirroredLabels.push(`${(d * edgeKm * 2).toFixed(1)}`)
+  }
+
+  const datasets: any[] = []
+
+  if (chartLocations.length === 1) {
+    // Single city: show median, 25th, 75th
+    const loc = chartLocations[0]
+    const medianVals: number[] = []
+    const q25Vals: number[] = []
+    const q75Vals: number[] = []
+
+    for (let d = maxDist; d >= 1; d--) {
+      const stat = loc.ringStats.find(r => r.distance === d)
+      medianVals.push(stat ? stat.median : 0)
+      q25Vals.push(stat ? stat.q25 : 0)
+      q75Vals.push(stat ? stat.q75 : 0)
+    }
+    medianVals.push(loc.centerValue)
+    q25Vals.push(loc.centerValue)
+    q75Vals.push(loc.centerValue)
+    for (let d = 1; d <= maxDist; d++) {
+      const stat = loc.ringStats.find(r => r.distance === d)
+      medianVals.push(stat ? stat.median : 0)
+      q25Vals.push(stat ? stat.q25 : 0)
+      q75Vals.push(stat ? stat.q75 : 0)
+    }
+
+    datasets.push(
+      { name: 'Median', values: medianVals },
+      { name: '25th percentile', values: q25Vals },
+      { name: '75th percentile', values: q75Vals },
+    )
+  } else {
+    // Multiple cities: only median, one line per city
+    for (const loc of chartLocations) {
+      const vals: number[] = []
+      for (let d = maxDist; d >= 1; d--) {
+        const stat = loc.ringStats.find(r => r.distance === d)
+        vals.push(stat ? stat.median : 0)
+      }
+      vals.push(loc.centerValue)
+      for (let d = 1; d <= maxDist; d++) {
+        const stat = loc.ringStats.find(r => r.distance === d)
+        vals.push(stat ? stat.median : 0)
+      }
+      datasets.push({ name: loc.city, values: vals })
+    }
+  }
+
+  const chartEl = document.getElementById('ring_chart')!
+  // Destroy old chart by clearing the container
+  chartEl.replaceChildren()
+  new Chart(chartEl, {
+    data: {
+      labels: mirroredLabels,
+      datasets,
+    },
+    type: 'line',
+    height: 300,
+    colors: chartLocations.length === 1
+      ? ['#ff69b4', '#ffa500', '#41c6ff']
+      : chartLocations.map(l => l.color),
+    axisOptions: {
+      xIsSeries: true,
+      xAxisMode: 'tick',
+      yAxisMode: 'span',
+    },
+    lineOptions: {
+      hideLine: false,
+      regionFill: false,
+      dotSize: 4,
+    },
+  })
 }
 
 map.addControl(mapOverlay)
