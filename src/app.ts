@@ -287,6 +287,49 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
 
     lastPop = Number(dt.rollup({ total: (d: any) => aq.op.sum(d.value) }).get('total'))
 
+    // Log density quantiles per hollow ring
+    const ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[] = []
+    for (let d = 1; d <= radius; d++) {
+      const ring = h3.gridRing(clickedIndex, d)
+      if (ring.length === 0) continue
+
+      // Find matching cells in this ring
+      const ringSet = new Set(ring)
+      const ringValues: number[] = []
+      for (const g of matchedTiles) {
+        for (let i = 0; i < g.index.length; i++) {
+          if (ringSet.has(g.index[i])) {
+            ringValues.push(g.value[i])
+          }
+        }
+      }
+
+      if (ringValues.length === 0) {
+        ringStats.push({ distance: d, median: 0, q25: 0, q75: 0, count: 0 })
+        continue
+      }
+
+      // Weighted quantiles for this ring
+      const ringTable = aq.table({ value: ringValues })
+        .orderby('value')
+        .derive({ cumsum: aq.rolling((d: any) => aq.op.sum(d.value)) })
+        .derive({ quantile: (d: any) => d.cumsum / aq.op.sum(d.value) })
+        .derive({
+          median_dist: (d: any) => aq.op.abs(d.quantile - 0.5),
+          q75_dist: (d: any) => aq.op.abs(d.quantile - 0.75),
+          q25_dist: (d: any) => aq.op.abs(d.quantile - 0.25),
+        })
+
+      const median = (ringTable.orderby('median_dist').get('value', 0) as number) * scale
+      const q25 = (ringTable.orderby('q25_dist').get('value', 0) as number) * scale
+      const q75 = (ringTable.orderby('q75_dist').get('value', 0) as number) * scale
+
+      ringStats.push({ distance: d, median, q25, q75, count: ringValues.length })
+    }
+
+    console.log('[makeHighlight] ring density quantiles (pop-weighted, per km²):')
+    console.table(ringStats)
+
     document.getElementById('results_text')!.innerHTML = `
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
