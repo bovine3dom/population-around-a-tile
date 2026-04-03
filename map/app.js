@@ -120608,7 +120608,7 @@ var getColour = (v2) => {
   const rgb2 = c2.formatRgb().match(/[\d.]+/g).map(Number);
   const [lo, hi] = colourDomain;
   const normalised = lo === hi ? 0 : Math.max(0, Math.min(1, (v2 - lo) / (hi - lo)));
-  return [rgb2[0], rgb2[1], rgb2[2], Math.sqrt(normalised) * 255];
+  return [rgb2[0], rgb2[1], rgb2[2], 255];
 };
 function human(number4) {
   return parseFloat(number4.toPrecision(2)).toLocaleString();
@@ -120622,7 +120622,7 @@ function chQuery(query2) {
 }
 var chquerygen = ({ h3Index, resolution }) => {
   const query2 = `
-      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + 3}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value --, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -120936,5 +120936,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=1859AFE27CB9A94C64756E2164756E21
+//# debugId=C63B4B9A5F9CC17064756E2164756E21
 //# sourceMappingURL=app.js.map

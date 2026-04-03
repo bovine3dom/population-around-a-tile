@@ -63,7 +63,8 @@ const getColour = (v: number): [number, number, number, number] => {
   // Normalise v for opacity: clamp to domain, then 0-1
   const [lo, hi] = colourDomain
   const normalised = lo === hi ? 0 : Math.max(0, Math.min(1, (v - lo) / (hi - lo)))
-  return [rgb[0], rgb[1], rgb[2], Math.sqrt(normalised) * 255]
+  // return [rgb[0], rgb[1], rgb[2], Math.sqrt(normalised) * 255]
+  return [rgb[0], rgb[1], rgb[2], 255]
 }
 
 function human(number: number): string {
@@ -80,7 +81,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + 3}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value --, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
