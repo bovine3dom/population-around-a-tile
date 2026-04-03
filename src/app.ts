@@ -38,10 +38,7 @@ const map = new maplibregl.Map({
   minZoom: 1,
   bearing: 0,
   pitch: 0,
-  maxBounds: [
-    [-45, 0],
-    [70, 75],
-  ],
+  boxZoom: false,
 })
 
 interface Metadata {
@@ -83,7 +80,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -348,7 +345,6 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
       ringStats.push({ distance: d, median, q25, q75, count: ringValues.length })
     }
 
-    console.log('[makeHighlight] ring density quantiles (pop-weighted, per km²):')
     console.table(ringStats)
 
     const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
@@ -442,30 +438,38 @@ function renderChart() {
   }
 
   const chartEl = document.getElementById('ring_chart')!
-  // Destroy old chart by clearing the container
-  chartEl.replaceChildren()
-  new Chart(chartEl, {
-    data: {
-      labels: mirroredLabels,
-      datasets,
-    },
-    type: 'line',
-    height: 300,
-    colors: chartLocations.length === 1
-      ? ['#ff69b4', '#ffa500', '#41c6ff']
-      : chartLocations.map(l => l.color),
-    axisOptions: {
-      xIsSeries: true,
-      xAxisMode: 'tick',
-      yAxisMode: 'span',
-    },
-    lineOptions: {
-      hideLine: false,
-      regionFill: false,
-      dotSize: 4,
-    },
-  })
+  const data = {
+    labels: mirroredLabels,
+    datasets,
+  }
+  const config = {
+      type: 'line',
+      height: 300,
+      colors: chartLocations.length === 1
+        ? ['#ff69b4', '#ffa500', '#41c6ff']
+        : chartLocations.map(l => l.color),
+      axisOptions: {
+        xIsSeries: true,
+        xAxisMode: 'tick',
+        yAxisMode: 'span',
+      },
+      lineOptions: {
+        hideDots: 1,
+      },
+      animate: false,
+  }
+  if (chart == undefined || chart?.state?.datasets?.length !== datasets.length) {
+    chartEl.replaceChildren()
+    chart = new Chart(chartEl, {
+      data,
+      ...config,
+    })
+  } else {
+    chart.update({labels: mirroredLabels, datasets})
+  }
 }
+
+let chart
 
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())
