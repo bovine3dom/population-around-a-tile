@@ -96,7 +96,8 @@ export function getHexagonResolution(
   const latitudeScaleFactor = Math.log(1 / Math.cos((Math.PI * viewport.latitude) / 180))
 
   const vanilla_zoom = Math.max(0, Math.floor(hexagonScaleFactor + latitudeScaleFactor - BIAS))
-  return Math.max(0, Math.floor((vanilla_zoom + 1) / 2) * 2 - 1)
+  return vanilla_zoom
+  // return Math.max(0, Math.floor((vanilla_zoom + 1) / 2) * 2 - 1) // odd only
 }
 
 // Tileset2D is not generic over TileIndex, so we need to suppress type errors

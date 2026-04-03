@@ -75,7 +75,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 2}, h3GetResolution(h3))) index, sum(population) value
+      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population) value
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -117,7 +117,6 @@ function updateLegend() {
       getFillColor: getColour,
       colorDomain: [q01, q99],
       onDataChange: () => {
-        console.log(`[datachange] tiles loaded: ${tileCache.size}`)
         updateLegend()
       },
     })],
@@ -138,7 +137,6 @@ const h3Layer = new ArrowH3TileLayer({
   getFillColor: getColour,
   colorDomain: [0, 1],
   onDataChange: () => {
-    console.log(`[datachange] tiles loaded: ${tileCache.size}`)
     updateLegend()
   },
 })

@@ -43,24 +43,52 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     return values
   }
 
-  // Sample values for quantile computation (random subset if too many)
+  // Sample values for quantile computation from currently VISIBLE tiles at the dominant resolution
   getSampleValues(maxSamples: number = 100_000): number[] {
+    const tileset = this.state.tileset
+    if (!tileset) return []
+
+    // Only sample from tiles that are currently visible in the viewport
+    const visibleTiles = tileset.tiles.filter((t: any) => t.isVisible && t.content)
+    if (visibleTiles.length === 0) return []
+
+    // Find the dominant resolution among visible tiles
+    const resCounts = new Map<number, number>()
+    for (const tile of visibleTiles) {
+      const res = h3.getResolution(tile.content.data.index[0])
+      resCounts.set(res, (resCounts.get(res) ?? 0) + tile.content.data.value.length)
+    }
+    let dominantRes = 0
+    let maxCount = 0
+    for (const [res, count] of resCounts) {
+      if (count > maxCount) {
+        maxCount = count
+        dominantRes = res
+      }
+    }
+
+    // Filter to only the dominant resolution
+    const filteredTiles = visibleTiles.filter((t: any) => {
+      const res = h3.getResolution(t.content.data.index[0])
+      return res === dominantRes
+    })
+
     let total = 0
-    for (const tileData of tileCache.values()) {
-      total += tileData.data.value.length
+    for (const tile of filteredTiles) {
+      total += tile.content.data.value.length
     }
     if (total <= maxSamples) {
       const values: number[] = []
-      for (const tileData of tileCache.values()) {
-        values.push(...tileData.data.value)
+      for (const tile of filteredTiles) {
+        values.push(...tile.content.data.value)
       }
       return values
     }
     // Reservoir sampling
     const values: number[] = new Array(maxSamples)
     let n = 0
-    for (const tileData of tileCache.values()) {
-      const tileValues = tileData.data.value
+    for (const tile of filteredTiles) {
+      const tileValues = tile.content.data.value
       for (let i = 0; i < tileValues.length; i++) {
         n++
         if (n <= maxSamples) {
