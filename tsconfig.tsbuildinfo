@@ -1,1 +1,1 @@
-{"root":["./src/ArrowH3TileLayer.ts","./src/app.ts","./src/tiny-cities.ts","./src/vendor/h3-tileset-2d.ts","./src/vendor/observablehq.ts"],"errors":true,"version":"5.9.3"}
+{"root":["./src/ArrowH3TileLayer.ts","./src/app.ts","./src/tiny-cities.ts","./src/vendor/h3-tileset-2d.ts","./src/vendor/observablehq.ts"],"version":"5.9.3"}

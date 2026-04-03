@@ -307,7 +307,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
 
     // Log density quantiles per hollow ring
     const ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[] = []
-    for (let d = 1; d <= radius; d++) {
+    for (let d = 0; d <= radius; d++) {
       const ring = h3.gridRing(clickedIndex, d)
       if (ring.length === 0) continue
 
@@ -405,10 +405,7 @@ function renderChart() {
       q25Vals.push(stat ? stat.q25 : 0)
       q75Vals.push(stat ? stat.q75 : 0)
     }
-    medianVals.push(loc.centerValue)
-    q25Vals.push(loc.centerValue)
-    q75Vals.push(loc.centerValue)
-    for (let d = 1; d <= maxDist; d++) {
+    for (let d = 0; d <= maxDist; d++) {
       const stat = loc.ringStats.find(r => r.distance === d)
       medianVals.push(stat ? stat.median : 0)
       q25Vals.push(stat ? stat.q25 : 0)
@@ -428,8 +425,7 @@ function renderChart() {
         const stat = loc.ringStats.find(r => r.distance === d)
         vals.push(stat ? stat.median : 0)
       }
-      vals.push(loc.centerValue)
-      for (let d = 1; d <= maxDist; d++) {
+      for (let d = 0; d <= maxDist; d++) {
         const stat = loc.ringStats.find(r => r.distance === d)
         vals.push(stat ? stat.median : 0)
       }
@@ -469,7 +465,7 @@ function renderChart() {
   }
 }
 
-let chart
+let chart: typeof Chart | undefined
 
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())

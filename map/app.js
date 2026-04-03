@@ -120787,7 +120787,7 @@ function makeHighlight(info, force_radius, append2 = false) {
     lastLandDensity = dt2.rollup({ median: (d2) => op_api_default.median(d2.value) }).get("median") * scale8;
     lastPop = Number(dt2.rollup({ total: (d2) => op_api_default.sum(d2.value) }).get("total"));
     const ringStats = [];
-    for (let d2 = 1;d2 <= radius; d2++) {
+    for (let d2 = 0;d2 <= radius; d2++) {
       const ring = gridRing(clickedIndex, d2);
       if (ring.length === 0)
         continue;
@@ -120862,10 +120862,7 @@ function renderChart() {
       q25Vals.push(stat ? stat.q25 : 0);
       q75Vals.push(stat ? stat.q75 : 0);
     }
-    medianVals.push(loc.centerValue);
-    q25Vals.push(loc.centerValue);
-    q75Vals.push(loc.centerValue);
-    for (let d2 = 1;d2 <= maxDist; d2++) {
+    for (let d2 = 0;d2 <= maxDist; d2++) {
       const stat = loc.ringStats.find((r2) => r2.distance === d2);
       medianVals.push(stat ? stat.median : 0);
       q25Vals.push(stat ? stat.q25 : 0);
@@ -120879,8 +120876,7 @@ function renderChart() {
         const stat = loc.ringStats.find((r2) => r2.distance === d2);
         vals.push(stat ? stat.median : 0);
       }
-      vals.push(loc.centerValue);
-      for (let d2 = 1;d2 <= maxDist; d2++) {
+      for (let d2 = 0;d2 <= maxDist; d2++) {
         const stat = loc.ringStats.find((r2) => r2.distance === d2);
         vals.push(stat ? stat.median : 0);
       }
@@ -120940,5 +120936,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=3C4A444A3DC778F064756E2164756E21
+//# debugId=1859AFE27CB9A94C64756E2164756E21
 //# sourceMappingURL=app.js.map
