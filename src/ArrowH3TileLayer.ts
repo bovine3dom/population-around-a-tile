@@ -45,12 +45,18 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
   // Sample values for quantile computation from currently VISIBLE tiles at the dominant resolution
   getSampleValues(maxSamples: number = 100_000): number[] {
+    const { values } = this.getSampleValuesAndWeights(maxSamples)
+    return values
+  }
+
+  // Sample values and optional weights for weighted quantile computation
+  getSampleValuesAndWeights(maxSamples: number = 100_000): { values: number[]; weights?: number[] } {
     const tileset = this.state.tileset
-    if (!tileset) return []
+    if (!tileset) return { values: [] }
 
     // Only sample from tiles that are currently visible in the viewport
     const visibleTiles = tileset.tiles.filter((t: any) => t.isVisible && t.content)
-    if (visibleTiles.length === 0) return []
+    if (visibleTiles.length === 0) return { values: [] }
 
     // Find the dominant resolution among visible tiles
     const resCounts = new Map<number, number>()
@@ -77,31 +83,41 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     for (const tile of filteredTiles) {
       total += tile.content.data.value.length
     }
+
+    // Check if weight column exists
+    const hasWeights = filteredTiles.length > 0 && filteredTiles[0].content.data.weight !== undefined
+
     if (total <= maxSamples) {
       const values: number[] = []
+      const weights: number[] = []
       for (const tile of filteredTiles) {
         values.push(...tile.content.data.value)
+        if (hasWeights) weights.push(...tile.content.data.weight)
       }
-      return values
+      return hasWeights ? { values, weights } : { values }
     }
     // Reservoir sampling
     const values: number[] = new Array(maxSamples)
+    const weights: number[] = hasWeights ? new Array(maxSamples) : []
     let n = 0
     for (const tile of filteredTiles) {
       const tileValues = tile.content.data.value
+      const tileWeights = hasWeights ? tile.content.data.weight : null
       for (let i = 0; i < tileValues.length; i++) {
         n++
         if (n <= maxSamples) {
           values[n - 1] = tileValues[i]
+          if (hasWeights && tileWeights) weights[n - 1] = tileWeights[i]
         } else {
           const j = Math.floor(Math.random() * n)
           if (j < maxSamples) {
             values[j] = tileValues[i]
+            if (hasWeights && tileWeights) weights[j] = tileWeights[i]
           }
         }
       }
     }
-    return values
+    return hasWeights ? { values, weights } : { values }
   }
 
   // Find all rows matching cells in a gridDisk around an h3 index

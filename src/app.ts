@@ -54,11 +54,15 @@ async function getMetadata(): Promise<Metadata> {
 
 // Shared colour ramp — domain updated dynamically from loaded tile values
 const colourRamp = d3.scaleSequential(d3.interpolateSpectral).domain([0, 1])
+let colourDomain: [number, number] = [0, 0]
 
 const getColour = (v: number): [number, number, number, number] => {
   const c = d3.color(colourRamp(v))!
   const rgb = c.formatRgb().match(/[\d.]+/g)!.map(Number)
-  return [rgb[0], rgb[1], rgb[2], Math.sqrt(v) * 255]
+  // Normalise v for opacity: clamp to domain, then 0-1
+  const [lo, hi] = colourDomain
+  const normalised = lo === hi ? 0 : Math.max(0, Math.min(1, (v - lo) / (hi - lo)))
+  return [rgb[0], rgb[1], rgb[2], Math.sqrt(normalised) * 255]
 }
 
 function human(number: number): string {
@@ -75,7 +79,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population) value
+      select h3ToParent(h3, least(${resolution + 4}, h3GetResolution(h3))) index, sum(population) value, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -87,16 +91,55 @@ const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: numb
 let legendElement: SVGSVGElement | null = null
 const attributionEl = document.getElementById('attribution')!
 
+// Throttled legend update: fires immediately, then waits 500ms before next call
+let legendThrottleTimer: ReturnType<typeof setTimeout> | null = null
+
+function throttledUpdateLegend() {
+  if (legendThrottleTimer) return
+  updateLegend()
+  legendThrottleTimer = setTimeout(() => {
+    legendThrottleTimer = null
+  }, 500)
+}
+
+// Weighted quantile: sorts values by v, uses weights to find quantile positions
+function weightedQuantile(values: number[], weights: number[], p: number): number {
+  // Create index array and sort by values
+  const idx = values.map((_, i) => i)
+  idx.sort((a, b) => values[a] - values[b])
+
+  let cumWeight = 0
+  const totalWeight = weights.reduce((s, w) => s + w, 0)
+  const target = p * totalWeight
+
+  for (const i of idx) {
+    cumWeight += weights[i]
+    if (cumWeight >= target) {
+      return values[i]
+    }
+  }
+  return values[idx[idx.length - 1]]
+}
+
 function updateLegend() {
-  const samples = h3Layer.getSampleValues(100_000)
-  if (samples.length === 0) return
+  const { values, weights } = h3Layer.getSampleValuesAndWeights(100_000)
+  if (values.length === 0) return
 
-  samples.sort((a, b) => a - b)
+  let q01: number, q99: number
 
-  // Compute quantile-based domain: use 0.01 and 0.99 quantiles to avoid extreme outliers
-  const q01 = d3.quantile(samples, 0.01) ?? 0
-  const q99 = d3.quantile(samples, 0.99) ?? 1
-  colourRamp.domain([q01, q99])
+  if (weights && weights.length === values.length) {
+    // Weighted quantiles
+    q01 = weightedQuantile(values, weights, 0.01)
+    q99 = weightedQuantile(values, weights, 0.99)
+  } else {
+    // Unweighted
+    values.sort((a, b) => a - b)
+    q01 = d3.quantile(values, 0.01) ?? 0
+    q99 = d3.quantile(values, 0.99) ?? 1
+  }
+
+  colourDomain = [q01, q99]
+  colourRamp.domain(colourDomain)
 
   // Re-render legend
   const fmt = d3.format('.0f')
@@ -116,9 +159,7 @@ function updateLegend() {
       pickable: true,
       getFillColor: getColour,
       colorDomain: [q01, q99],
-      onDataChange: () => {
-        updateLegend()
-      },
+      onDataChange: throttledUpdateLegend,
     })],
   })
 }
@@ -136,9 +177,7 @@ const h3Layer = new ArrowH3TileLayer({
   pickable: true,
   getFillColor: getColour,
   colorDomain: [0, 1],
-  onDataChange: () => {
-    updateLegend()
-  },
+  onDataChange: throttledUpdateLegend,
 })
 
 const mapOverlay = new MapboxOverlay({
