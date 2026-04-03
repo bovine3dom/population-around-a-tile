@@ -120783,13 +120783,10 @@ function makeHighlight(info, force_radius, append2 = false) {
       q25_dist: (d2) => op_api_default.abs(d2.quantile - 0.25)
     }).orderby("median_dist");
     window.dt = dt2;
-    const res = getResolution(dt2.get("index", 0));
-    const areaKm2 = getHexagonAreaAvg(res, "km2");
-    const scale8 = 1 / areaKm2;
-    lastDensity = dt2.get("value", 0) * scale8;
-    const last75Density = dt2.orderby("q75_dist").get("value", 0) * scale8;
-    const last25Density = dt2.orderby("q25_dist").get("value", 0) * scale8;
-    lastLandDensity = dt2.rollup({ median: (d2) => op_api_default.median(d2.value) }).get("median") * scale8;
+    lastDensity = dt2.get("value", 0);
+    const last75Density = dt2.orderby("q75_dist").get("value", 0);
+    const last25Density = dt2.orderby("q25_dist").get("value", 0);
+    lastLandDensity = dt2.rollup({ median: (d2) => op_api_default.median(d2.value) }).get("median");
     lastPop = Number(dt2.rollup({ total: (d2) => op_api_default.sum(d2.value) }).get("total"));
     const ringStats = [];
     for (let d2 = 0;d2 <= radius; d2++) {
@@ -120814,17 +120811,19 @@ function makeHighlight(info, force_radius, append2 = false) {
         q75_dist: (d3) => op_api_default.abs(d3.quantile - 0.75),
         q25_dist: (d3) => op_api_default.abs(d3.quantile - 0.25)
       });
-      const median = ringTable.orderby("median_dist").get("value", 0) * scale8;
-      const q25 = ringTable.orderby("q25_dist").get("value", 0) * scale8;
-      const q75 = ringTable.orderby("q75_dist").get("value", 0) * scale8;
+      const median = ringTable.orderby("median_dist").get("value", 0);
+      const q25 = ringTable.orderby("q25_dist").get("value", 0);
+      const q75 = ringTable.orderby("q75_dist").get("value", 0);
       ringStats.push({ distance: d2, median, q25, q75, count: ringValues.length });
     }
     console.table(ringStats);
+    const res = getResolution(dt2.get("index", 0));
+    const areaKm2 = getHexagonAreaAvg(res, "km2");
     const edgeKm = getHexagonEdgeLengthAvg(res, "km");
     const centerLat = cellToLatLng(clickedIndex)[0];
     const centerLon = cellToLatLng(clickedIndex)[1];
     const cityLabel = findClosestCity(centerLat, centerLon);
-    const centerValue = dt2.get("value", 0) * scale8;
+    const centerValue = dt2.get("value", 0);
     if (append2) {
       chartLocations.push({ city: cityLabel, edgeKm, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length] });
     } else {
@@ -120835,7 +120834,7 @@ function makeHighlight(info, force_radius, append2 = false) {
             <p>Approx radius: ${human(getHexagonEdgeLengthAvg(res, "km") * 2 * radius + 1)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
-            <p>Total population: <b>${human(lastPop)} ${res == 5 ? '<sl-tag variant="warning"><sl-icon name="exclamation-triangle"></sl-icon>&nbsp; ~2x overestimate at this zoom level</sl-tag>' : ""}</b>                                                                          </p>
+            <p>Total population: <b>${human(lastPop * areaKm2)}</b>                                                                          </p>
             `;
     document.getElementById("settings").show();
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(dt2)] });
@@ -120941,5 +120940,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=01E2FC919397EEA464756E2164756E21
+//# debugId=809793C7DFE5095564756E2164756E21
 //# sourceMappingURL=app.js.map
