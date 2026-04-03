@@ -144,13 +144,18 @@ const h3Layer = new ArrowH3TileLayer({
 const mapOverlay = new MapboxOverlay({
   interleaved: false,
   onClick: (info: any) => makeHighlight(info, undefined),
-  getTooltip: ({ object }: { object?: any }) => {
-    if (!object) return null
-    const toDivs = (kv: [string, unknown]): string => {
-      return `<div>${kv[0]}: ${typeof kv[1] == 'number' ? parseFloat(kv[1].toPrecision(3)) : kv[1]}</div>`
-    }
+  getTooltip: (info: any) => {
+    if (info.index === undefined || !info.sourceTile?.content?.data) return null
+
+    const idx = info.index
+    const data = info.sourceTile.content.data
+    const h3Index = typeof data.index[idx] === 'bigint' ? data.index[idx].toString(16) : data.index[idx]
+    const value = data.value[idx]
+
+    if (value === undefined) return null
+
     return {
-      html: `${lastDensity !== undefined ? '<div>density: ' + lastDensity + ' population: ' + lastPop + '</div>' : ''} ${Object.entries(object).map(toDivs).join(' ')}`,
+      html: `${lastDensity !== undefined ? '<div>density: ' + lastDensity + ' population: ' + lastPop + '</div>' : ''}<div>index: ${h3Index}</div><div>value: ${typeof value == 'number' ? parseFloat(value.toPrecision(3)) : value}`,
       style: {
         backgroundColor: '#fff',
         fontFamily: 'sans-serif',
@@ -175,15 +180,6 @@ const getHighlightData = (df: any) =>
   })
 
 function makeHighlight(info: any | undefined, force_radius: number | undefined) {
-  console.log('[makeHighlight]', {
-    info,
-    layerId: info?.layer?.id,
-    objectIndex: info?.object?.index,
-    tileId: info?.sourceTile?.id,
-    cacheSize: tileCache.size,
-    cacheKeys: [...tileCache.keys()].slice(0, 5),
-  })
-
   lastInfo = info ?? lastInfo
   if (info?.layer == null) {
     return
@@ -196,7 +192,17 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
   }
   if (info.layer.props.ish3) {
     const radius = force_radius ?? Number((document.getElementById('desired_radius') as HTMLInputElement).value)
-    const clickedIndex = info.object.index
+
+    // Get the clicked H3 index from the tile content
+    const clickedIndexBigInt = info.sourceTile?.content?.data?.index?.[info.index]
+    if (clickedIndexBigInt === undefined) {
+      console.warn('[makeHighlight] Could not find clicked H3 index')
+      return
+    }
+    // Convert BigInt to hex string for h3-js
+    const clickedIndex = typeof clickedIndexBigInt === 'bigint'
+      ? clickedIndexBigInt.toString(16)
+      : String(clickedIndexBigInt)
     console.log('[makeHighlight] clicked index:', clickedIndex, 'radius:', radius)
     console.log('[makeHighlight] resolution:', h3.getResolution(clickedIndex))
 

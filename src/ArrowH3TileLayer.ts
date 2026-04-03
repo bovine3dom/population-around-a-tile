@@ -116,8 +116,11 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       const matchedValues: number[] = []
 
       for (let i = 0; i < indices.length; i++) {
-        if (disk.has(indices[i])) {
-          matchedIndices.push(indices[i])
+        // Convert BigInt to hex string for comparison
+        const raw = indices[i] as unknown
+        const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
+        if (disk.has(idxStr)) {
+          matchedIndices.push(idxStr)
           matchedValues.push(values[i])
         }
       }
