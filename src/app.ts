@@ -487,7 +487,7 @@ document.getElementById('desired_radius')!.addEventListener('sl-change', (e: Eve
 const params = new URLSearchParams(window.location.search)
 attributionEl.innerText =
   '© ' +
-  [params.get('c'), 'Eurostat', 'MapTiler', 'OpenStreetMap contributors', params.get('trains') !== null ? 'OpenRailwayMap' : null]
+  [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors', params.get('trains') !== null ? 'OpenRailwayMap' : null]
     .filter((x) => x !== null)
     .join(' © ')
 
