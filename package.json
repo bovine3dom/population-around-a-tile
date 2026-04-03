@@ -4,7 +4,7 @@
     "scripts": {
         "build": "bun build --minify --bundle --outdir=map src/app.ts",
         "watch": "bun build --minify --watch --bundle --outdir=map src/app.ts",
-        "serve": "http-server map -p 1983",
+        "serve": "http-server map -p 1983 -c-1",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
