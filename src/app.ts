@@ -31,7 +31,7 @@ const start_pos: StartPos = {
 
 const map = new maplibregl.Map({
   container: 'map',
-  style: `https://api.maptiler.com/maps/toner-v2/style.json?key=${window.location.hostname == 'localhost' ? 'Y4leWPnhJFGnTFFk1cru' : 'L7Sd3jHa1AR1dtyLCTgq'}`,
+  style: 'https://compute.olie.science/fahrtle/toner_ofm_moderatlist.json',
   center: [start_pos.x, start_pos.y],
   zoom: start_pos.z,
   maxZoom: 18,
