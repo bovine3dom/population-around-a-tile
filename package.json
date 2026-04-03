@@ -1,21 +1,26 @@
 {
-    "name": "H3-MON",
+    "name": "Population around a tile",
     "license": "BSD-2-Clause",
     "scripts": {
-        "serve_memleak": "yarn esbuild --bundle src/app.js --outfile=map/app.js --servedir=map",
-        "build": "yarn esbuild --minify --bundle src/app.js --outfile=map/app.js",
-        "watch": "yarn esbuild --minify --watch --bundle src/app.js --outfile=map/app.js",
-        "serve": "yarn deno run --lock=deno.lock --allow-net --allow-read srv/watcher.js"
+        "build": "bun build --minify --bundle --outdir=map src/app.ts",
+        "watch": "bun build --minify --watch --bundle --outdir=map src/app.ts",
+        "serve": "http-server map -p 1983",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@loaders.gl/arrow": "^4.4.1",
         "arquero": "^5.4.1",
         "d3": "^7.9.0",
         "d3-dsv": "^3.0.1",
         "d3-scale-chromatic": "^3.1.0",
         "deck.gl": "^9.0.14",
-        "deno-bin": "^1.43.5",
-        "esbuild": "^0.21.3",
         "h3-js": "^4.1.0",
+        "http-server": "^14.1.1",
         "maplibre-gl": "^3.0.0"
+    },
+    "devDependencies": {
+        "@types/d3": "^7.4.3",
+        "@types/d3-scale-chromatic": "^3.0.3",
+        "typescript": "^5.4.5"
     }
 }
