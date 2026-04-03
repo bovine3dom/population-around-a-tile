@@ -10,6 +10,8 @@ import * as h3 from 'h3-js'
 import { ArrowH3TileLayer, tileCache, type ArrowH3TileLayerProps } from './ArrowH3TileLayer'
 // @ts-expect-error no types
 import { Chart } from 'frappe-charts/dist/frappe-charts.esm'
+import { findClosestCity } from './tiny-cities'
+(window as any).findClosestCity = findClosestCity
 
 const username = 'public_web';
 const password = 'a2hkayBzZGlsO2RqIHNsayBsYWpzZCBmbGogc2Rsa2og';
@@ -332,22 +334,56 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
     console.log('[makeHighlight] ring density quantiles (pop-weighted, per km²):')
     console.table(ringStats)
 
-    // Render chart
+    // Render symmetric chart around 0
     const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
-    const labels = ringStats.map(r => `${(r.distance * edgeKm * 2).toFixed(1)} km`)
+    const mirroredLabels: string[] = []
+    const mirroredMedian: number[] = []
+    const mirroredQ25: number[] = []
+    const mirroredQ75: number[] = []
+
+    // Negative side (reverse order, include all rings)
+    for (let i = ringStats.length - 1; i >= 0; i--) {
+      const r = ringStats[i]
+      mirroredLabels.push(`-${(r.distance * edgeKm * 2).toFixed(1)}`)
+      mirroredMedian.push(r.median)
+      mirroredQ25.push(r.q25)
+      mirroredQ75.push(r.q75)
+    }
+    // Center (ring 0 - the clicked hexagon)
+    const centerValue = (dt.get('value', 0) as number) * scale
+    mirroredLabels.push('0')
+    mirroredMedian.push(centerValue)
+    mirroredQ25.push(centerValue)
+    mirroredQ75.push(centerValue)
+    // Positive side (skip ring 0 to avoid duplicate)
+    for (let i = 0; i < ringStats.length; i++) {
+      const r = ringStats[i]
+      if (r.distance === 0) continue
+      mirroredLabels.push(`${(r.distance * edgeKm * 2).toFixed(1)}`)
+      mirroredMedian.push(r.median)
+      mirroredQ25.push(r.q25)
+      mirroredQ75.push(r.q75)
+    }
+
+    // Get city label for chart title
+    const centerLat = h3.cellToLatLng(clickedIndex)[0]
+    const centerLon = h3.cellToLatLng(clickedIndex)[1]
+    const cityLabel = findClosestCity(centerLat, centerLon)
+
     const chartEl = document.getElementById('ring_chart')!
     chartEl.innerHTML = ''
     new Chart(chartEl, {
       data: {
-        labels,
+        labels: mirroredLabels,
         datasets: [
-          { name: 'Median', values: ringStats.map(r => r.median) },
-          { name: '25th percentile', values: ringStats.map(r => r.q25) },
-          { name: '75th percentile', values: ringStats.map(r => r.q75) },
+          { name: 'Median', values: mirroredMedian },
+          { name: '25th percentile', values: mirroredQ25 },
+          { name: '75th percentile', values: mirroredQ75 },
         ],
       },
       type: 'line',
       height: 300,
+      title: cityLabel,
       colors: ['#ff69b4', '#ffa500', '#41c6ff'],
       axisOptions: {
         xIsSeries: true,

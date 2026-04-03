@@ -9,14 +9,17 @@
     },
     "dependencies": {
         "@loaders.gl/arrow": "^4.4.1",
+        "@types/geokdbush": "^1.1.5",
         "arquero": "^5.4.1",
         "d3": "^7.9.0",
         "d3-dsv": "^3.0.1",
         "d3-scale-chromatic": "^3.1.0",
         "deck.gl": "^9.0.14",
         "frappe-charts": "^1.6.2",
+        "geokdbush": "^2.0.1",
         "h3-js": "^4.1.0",
         "http-server": "^14.1.1",
+        "kdbush": "^4.0.2",
         "maplibre-gl": "^3.0.0"
     },
     "devDependencies": {
