@@ -120632,13 +120632,18 @@ var chquerygen = ({ h3Index, resolution }) => {
 var legendElement = null;
 var attributionEl = document.getElementById("attribution");
 var legendThrottleTimer = null;
+var wantsUpdate = false;
 function throttledUpdateLegend() {
-  if (legendThrottleTimer)
+  if (legendThrottleTimer) {
+    wantsUpdate = true;
     return;
+  }
   updateLegend();
   legendThrottleTimer = setTimeout(() => {
     legendThrottleTimer = null;
-  }, 500);
+    wantsUpdate && updateLegend();
+    wantsUpdate = false;
+  }, 1000);
 }
 function weightedQuantile(values2, weights, p2) {
   const idx = values2.map((_2, i3) => i3);
@@ -120936,5 +120941,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=C63B4B9A5F9CC17064756E2164756E21
+//# debugId=01E2FC919397EEA464756E2164756E21
 //# sourceMappingURL=app.js.map

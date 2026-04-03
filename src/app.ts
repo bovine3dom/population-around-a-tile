@@ -96,12 +96,18 @@ const attributionEl = document.getElementById('attribution')!
 // Throttled legend update: fires immediately, then waits 500ms before next call
 let legendThrottleTimer: ReturnType<typeof setTimeout> | null = null
 
+let wantsUpdate = false
 function throttledUpdateLegend() {
-  if (legendThrottleTimer) return
+  if (legendThrottleTimer) {
+    wantsUpdate = true
+    return
+  }
   updateLegend()
   legendThrottleTimer = setTimeout(() => {
     legendThrottleTimer = null
-  }, 500)
+    wantsUpdate && updateLegend()
+    wantsUpdate = false
+  }, 1000)
 }
 
 // Weighted quantile: sorts values by v, uses weights to find quantile positions
