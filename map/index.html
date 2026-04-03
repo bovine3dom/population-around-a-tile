@@ -36,6 +36,15 @@
     font-size: 8pt;
     border-radius: 0px;
 }
+@media (min-width: 768px) {
+    sl-drawer#settings {
+        --size: 40vw;
+    }
+    sl-drawer#settings::part(panel) {
+        height: 100vh;
+        width: 40vw;
+    }
+}
 :not(:defined) {
       visibility: hidden;
 }
@@ -113,6 +122,18 @@ why did you do this?
             </sl-drawer>
             <sl-button size="small" onclick="document.getElementById('settings').show()">Parameters/info</sl-button>
         </div>
+        <script>
+            function updateDrawerPlacement() {
+                const drawer = document.getElementById('settings');
+                if (window.innerWidth >= 768) {
+                    drawer.placement = 'left';
+                } else {
+                    drawer.placement = 'top';
+                }
+            }
+            window.addEventListener('resize', updateDrawerPlacement);
+            window.addEventListener('DOMContentLoaded', updateDrawerPlacement);
+        </script>
         <script type="module" src='app.js'></script>
     </body>
 </html>
