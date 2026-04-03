@@ -1,29 +1,30 @@
-import { TileLayer, TileLayerProps } from '@deck.gl/geo-layers'
+import { TileLayer, TileLayerProps, _Tile2DHeader as Tile2DHeader } from '@deck.gl/geo-layers'
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import { load } from '@loaders.gl/core'
-// @ts-expect-error no types available
 import { ArrowLoader } from '@loaders.gl/arrow'
+import type { ColumnarTable } from '@loaders.gl/schema'
 import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
-import * as d3 from 'd3'
 
-interface ArrowColumnarData {
+export type ArrowColumnarData = ColumnarTable & {
   data: {
     index: string[]
     value: number[]
+    [key: string]: ArrayLike<unknown>
   }
-  numRows: number
 }
 
-interface ArrowH3TileLayerProps extends Omit<TileLayerProps<ArrowColumnarData>, 'data'> {
+// Shared tile cache — survives layer replacement
+export const tileCache = new Map<string, ArrowColumnarData>()
+
+export interface ArrowH3TileLayerExternalProps {
+  getFillColor?: (value: number) => [number, number, number, number]
+  colorDomain?: [number, number]
+  onDataChange?: () => void
+}
+
+export interface ArrowH3TileLayerProps extends Omit<TileLayerProps<ArrowColumnarData>, 'data'>, ArrowH3TileLayerExternalProps {
   data: (tileInfo: { h3Index: string; resolution: number }) => Response | Promise<Response>
-}
-
-const colourRamp = d3.scaleSequential(d3.interpolateSpectral).domain([0, 100])
-const getColour = (v: number): [number, number, number, number] => {
-  const c = d3.color(colourRamp(v))!
-  const rgb = c.formatRgb().match(/[\d.]+/g)!.map(Number)
-  return [rgb[0], rgb[1], rgb[2], Math.sqrt(v) * 255]
 }
 
 export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
@@ -33,25 +34,95 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
   static layerName = 'ArrowH3TileLayer'
 
+  // Collect all loaded values
+  getAllValues(): number[] {
+    const values: number[] = []
+    for (const tileData of tileCache.values()) {
+      values.push(...tileData.data.value)
+    }
+    return values
+  }
+
+  // Sample values for quantile computation (random subset if too many)
+  getSampleValues(maxSamples: number = 100_000): number[] {
+    let total = 0
+    for (const tileData of tileCache.values()) {
+      total += tileData.data.value.length
+    }
+    if (total <= maxSamples) {
+      const values: number[] = []
+      for (const tileData of tileCache.values()) {
+        values.push(...tileData.data.value)
+      }
+      return values
+    }
+    // Reservoir sampling
+    const values: number[] = new Array(maxSamples)
+    let n = 0
+    for (const tileData of tileCache.values()) {
+      const tileValues = tileData.data.value
+      for (let i = 0; i < tileValues.length; i++) {
+        n++
+        if (n <= maxSamples) {
+          values[n - 1] = tileValues[i]
+        } else {
+          const j = Math.floor(Math.random() * n)
+          if (j < maxSamples) {
+            values[j] = tileValues[i]
+          }
+        }
+      }
+    }
+    return values
+  }
+
+  // Find all rows matching cells in a gridDisk around an h3 index
+  getCellsInRadius(h3Index: string, radius: number): { index: string[]; value: number[] }[] {
+    const disk = new Set(h3.gridDisk(h3Index, radius))
+    const results: { index: string[]; value: number[] }[] = []
+
+    for (const tileData of tileCache.values()) {
+      const indices = tileData.data.index
+      const values = tileData.data.value
+      const matchedIndices: string[] = []
+      const matchedValues: number[] = []
+
+      for (let i = 0; i < indices.length; i++) {
+        if (disk.has(indices[i])) {
+          matchedIndices.push(indices[i])
+          matchedValues.push(values[i])
+        }
+      }
+
+      if (matchedIndices.length > 0) {
+        results.push({ index: matchedIndices, value: matchedValues })
+      }
+    }
+
+    return results
+  }
+
   // @ts-expect-error TileLoadProps uses TileIndex but we use H3TileIndex
-  getTileData(tile: { index: H3TileIndex }): Promise<ArrowColumnarData> {
+  async getTileData(tile: { index: H3TileIndex }): Promise<ArrowColumnarData> {
     const h3Index = tile.index.i
     const resolution = h3.getResolution(tile.index.i)
-    const response = (this.props as unknown as ArrowH3TileLayerProps).data({ h3Index, resolution })
+    const response = await (this.props as unknown as ArrowH3TileLayerProps).data({ h3Index, resolution })
 
-    // @ts-expect-error loaders.gl/arrow has no type declarations
     const data = load(response, ArrowLoader, {
       arrow: {
         shape: 'columnar-table',
       },
     })
-    return data as Promise<ArrowColumnarData>
+    return data as unknown as Promise<ArrowColumnarData>
   }
 
   renderSubLayers(props: any) {
     const { data, tile } = props
+    const extProps = this.props as unknown as ArrowH3TileLayerExternalProps
+    const getFillColor = extProps.getFillColor
+    const colorDomain = extProps.colorDomain
 
-    if (!data || data.numRows === 0) return null
+    if (!data || data.data.index.length === 0) return null
 
     const h3Indices = data.data.index
     const values = data.data.value
@@ -63,15 +134,35 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
       getHexagon: (_d: unknown, { index }: { index: number }) => h3Indices.at(index)!.toString(16),
 
-      getFillColor: (_d: unknown, { index }: { index: number }) => getColour(values.at(index)!),
+      getFillColor: getFillColor
+        ? (_d: unknown, { index }: { index: number }) => getFillColor(values.at(index)!)
+        : (_d: unknown, { index }: { index: number }) => [128, 128, 128, 255] as [number, number, number, number],
 
       updateTriggers: {
         getHexagon: [h3Indices],
-        getFillColor: [values],
+        getFillColor: [values, getFillColor, colorDomain],
       },
       opacity: 1,
       extruded: false,
       stroked: false,
     })
+  }
+
+  _onTileLoad(tile: Tile2DHeader<ArrowColumnarData>) {
+    if (tile.content) {
+      const tileId = this.state.tileset?.getTileId(tile.index) ?? tile.id
+      tileCache.set(tileId, tile.content)
+      const extProps = this.props as unknown as ArrowH3TileLayerExternalProps
+      extProps.onDataChange?.()
+    }
+    super._onTileLoad(tile)
+  }
+
+  _onTileUnload(tile: Tile2DHeader<ArrowColumnarData>) {
+    const tileId = this.state.tileset?.getTileId(tile.index) ?? tile.id
+    tileCache.delete(tileId)
+    const extProps = this.props as unknown as ArrowH3TileLayerExternalProps
+    extProps.onDataChange?.()
+    super._onTileUnload(tile)
   }
 }
