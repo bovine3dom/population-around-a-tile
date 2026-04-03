@@ -190,7 +190,8 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
     })
     return
   }
-  if (info.layer.props.ish3) {
+  // Accept clicks on any layer (not just ones with ish3 prop)
+  if (info.layer.id === 'H3TileLayer') {
     const radius = force_radius ?? Number((document.getElementById('desired_radius') as HTMLInputElement).value)
 
     // Get the clicked H3 index from the tile content
@@ -203,21 +204,12 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
     const clickedIndex = typeof clickedIndexBigInt === 'bigint'
       ? clickedIndexBigInt.toString(16)
       : String(clickedIndexBigInt)
-    console.log('[makeHighlight] clicked index:', clickedIndex, 'radius:', radius)
-    console.log('[makeHighlight] resolution:', h3.getResolution(clickedIndex))
 
     // Get all matching cells from loaded tiles
     const matchedTiles = h3Layer.getCellsInRadius(clickedIndex, radius)
-    console.log('[makeHighlight] matched tile groups:', matchedTiles.length)
     let totalMatched = 0
     for (const g of matchedTiles) {
       totalMatched += g.index.length
-    }
-    console.log('[makeHighlight] total matched cells:', totalMatched)
-
-    if (totalMatched === 0) {
-      console.warn('[makeHighlight] No matching cells found. Data may not be loaded yet.')
-      return
     }
 
     // Build an arquero table from matched data
@@ -232,8 +224,6 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined) 
 
     // Deduplicate by index (take max value if duplicated across tile boundaries)
     dt = dt.groupby('index').rollup({ value: (d: any) => aq.op.max(d.value) })
-
-    console.log('[makeHighlight] deduplicated table size:', dt.size)
 
     dt = dt
       .orderby('value')
