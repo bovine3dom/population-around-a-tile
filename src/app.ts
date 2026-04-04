@@ -115,6 +115,11 @@ function weightedQuantile(values: number[], weights: number[], p: number): numbe
   const idx = values.map((_, i) => i)
   idx.sort((a, b) => values[a] - values[b])
 
+  // ?w easter egg - colour by weights
+  if (!colourByWeights) {
+    weights = new Array(values.length).fill(1)
+  }
+
   let cumWeight = 0
   const totalWeight = weights.reduce((s, w) => s + w, 0)
   const target = p * totalWeight
@@ -661,6 +666,7 @@ document.getElementById('desired_radius')!.addEventListener('sl-change', (e: Eve
 
 // ---- Attribution ----
 const params = new URLSearchParams(window.location.search)
+const colourByWeights = params.get('w') != undefined
 attributionEl.innerText =
   '© ' +
   [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors']
