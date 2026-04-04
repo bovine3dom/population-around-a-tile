@@ -674,7 +674,8 @@ attributionEl.innerText =
 map.on('moveend', () => {
   const pos = map.getCenter()
   const z = map.getZoom()
-  window.location.hash = `x=${pos.lng}&y=${pos.lat}&z=${z}`
+  window.location.replace(`#x=${pos.lng}&y=${pos.lat}&z=${z}`)
+  // window.location.hash = `x=${pos.lng}&y=${pos.lat}&z=${z}`
 })
 
 // ---- Favicon ----
