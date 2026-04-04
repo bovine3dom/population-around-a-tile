@@ -81,7 +81,7 @@ function chQuery(query: string): Promise<Response> {
 
 const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 3}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value --, sum(population) weight
+      select h3ToParent(h3, least(${resolution + 3}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -181,10 +181,14 @@ let lastInfo: any
 // Chart state: array of { city, edgeKm, ringStats, centerValue }
 let chartLocations: {
   city: string
+  lat: number
+  lon: number
   edgeKm: number
   ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[]
   centerValue: number
   color: string
+  ecdfData: { quantile: number; value: number }[]
+  cumPopData: { distance: number; cumPop: number }[]
 }[] = []
 
 const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db', '#00ced1', '#ffd700']
@@ -275,16 +279,20 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     for (const g of matchedTiles) {
       totalMatched += g.index.length
     }
+    console.log(matchedTiles)
 
     // Build an arquero table from matched data
     const allIndices: string[] = []
     const allValues: number[] = []
+    const allWeights: number[] = []
     for (const g of matchedTiles) {
       allIndices.push(...g.index)
       allValues.push(...g.value)
+      const weights = g?.weight ?? new Array(g.index.length).fill(1)
+      allWeights.push(...weights)
     }
 
-    let dt = aq.table({ index: allIndices, value: allValues })
+    let dt = aq.table({ index: allIndices, value: allValues, weight: allWeights })
 
     // Deduplicate by index (take max value if duplicated across tile boundaries)
     dt = dt.groupby('index').rollup({ value: (d: any) => aq.op.max(d.value) })
@@ -317,10 +325,12 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
       // Find matching cells in this ring
       const ringSet = new Set(ring)
       const ringValues: number[] = []
+      const ringWeights: number[] = []
       for (const g of matchedTiles) {
         for (let i = 0; i < g.index.length; i++) {
           if (ringSet.has(g.index[i])) {
             ringValues.push(g.value[i])
+            ringWeights.push(g.weight ? g.weight[i] : 1)
           }
         }
       }
@@ -333,7 +343,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
       // Weighted quantiles for this ring
       const ringTable = aq.table({ value: ringValues })
         .orderby('value')
-        .derive({ cumsum: aq.rolling((d: any) => aq.op.sum(d.value)) })
+        .derive({ cumsum: aq.rolling((d: any) => aq.op.sum(d.value)) }) // todo: shouldn't this be on weight? but then need to find value for each weight
         .derive({ quantile: (d: any) => d.cumsum / aq.op.sum(d.value) })
         .derive({
           median_dist: (d: any) => aq.op.abs(d.quantile - 0.5),
@@ -353,6 +363,49 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     const res = h3.getResolution(dt.get('index', 0) as string)
     const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
     const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
+
+    // Build ECDF data: sorted values with cumulative weight
+    const sortedDt = aq.table({ index: allIndices, value: allValues, weight: allWeights })
+      .groupby('index')
+      .rollup({ value: (d: any) => aq.op.max(d.value), weight: (d: any) => aq.op.max(d.weight) })
+      .orderby('value')
+
+    let totalWeight = 0
+    for (let i = 0; i < sortedDt.numRows(); i++) {
+      totalWeight += sortedDt.get('weight', i) as number
+    }
+
+    const ecdfData: { quantile: number; value: number }[] = []
+    let cumsum = 0
+    for (let i = 0; i < sortedDt.numRows(); i++) {
+      const v = sortedDt.get('value', i) as number
+      const w = sortedDt.get('weight', i) as number
+      cumsum += w
+      ecdfData.push({
+        quantile: cumsum / totalWeight,
+        value: v,
+      })
+    }
+
+    // Build cumulative population by distance
+    const cumPopData: { distance: number; cumPop: number }[] = []
+    let runningPop = 0
+    for (let d = 0; d <= radius; d++) {
+      const ring = h3.gridRing(clickedIndex, d)
+      if (ring.length === 0) continue
+
+      const ringSet = new Set(ring)
+      let ringPop = 0
+      for (const g of matchedTiles) {
+        for (let i = 0; i < g.index.length; i++) {
+          if (ringSet.has(g.index[i])) {
+            ringPop += g.value[i]
+          }
+        }
+      }
+      runningPop += ringPop
+      cumPopData.push({ distance: d, cumPop: runningPop * areaKm2 })
+    }
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
     const centerLon = h3.cellToLatLng(clickedIndex)[1]
     const cityLabel = findClosestCity(centerLat, centerLon)
@@ -360,14 +413,15 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
 
     // Build or append chart data
     if (append) {
-      chartLocations.push({ city: cityLabel, edgeKm, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length] })
+      chartLocations.push({ city: cityLabel, lat: centerLat, lon: centerLon, edgeKm, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length], ecdfData, cumPopData })
     } else {
-      chartLocations = [{ city: cityLabel, edgeKm, ringStats, centerValue, color: COLORS[0] }]
+      chartLocations = [{ city: cityLabel, lat: centerLat, lon: centerLon, edgeKm, ringStats, centerValue, color: COLORS[0], ecdfData, cumPopData }]
     }
 
     renderChart()
 
     document.getElementById('results_text')!.innerHTML = `
+            <p><b>${cityLabel}</b>:</p>
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
@@ -446,6 +500,7 @@ function renderChart() {
   const config = {
       type: 'line',
       height: 300,
+      title: "Weighted population density versus km from centre",
       colors: chartLocations.length === 1
         ? ['#ff69b4', '#ffa500', '#41c6ff']
         : chartLocations.map(l => l.color),
@@ -468,9 +523,131 @@ function renderChart() {
   } else {
     chart.update({labels: mirroredLabels, datasets})
   }
+
+  renderEcdfChart()
+  renderCumPopChart()
+}
+
+function renderEcdfChart() {
+  if (chartLocations.length === 0) return
+
+  const datasets: any[] = []
+  const colors: string[] = []
+
+  const percentileStep = 5
+  const percentiles: number[] = []
+  for (let p = 0; p <= 100; p += percentileStep) {
+    percentiles.push(p)
+  }
+
+  for (const loc of chartLocations) {
+    const sorted = loc.ecdfData.slice().sort((a: any, b: any) => a.quantile - b.quantile)
+
+    const values: number[] = []
+    for (const p of percentiles) {
+      const target = p / 100
+      let lo = 0, hi = sorted.length - 1
+      while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1
+        if (sorted[mid].quantile <= target) lo = mid
+        else hi = mid
+      }
+      const q0 = sorted[lo].quantile, v0 = sorted[lo].value
+      const q1 = sorted[hi].quantile, v1 = sorted[hi].value
+      const t = q1 === q0 ? 0 : (target - q0) / (q1 - q0)
+      values.push(v0 + t * (v1 - v0))
+    }
+
+    datasets.push({ name: loc.city, values })
+    colors.push(loc.color)
+  }
+
+  const labels = percentiles.map(p => `${p}%`)
+  const chartTitle = chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — population density versus weighted percentile'
+
+  const chartEl = document.getElementById('ecdf_chart')!
+  const chartData = {
+    labels,
+    datasets,
+  }
+  const config = {
+    type: 'line',
+    height: 300,
+    title: chartTitle,
+    colors,
+    axisOptions: {
+      xIsSeries: true,
+      xAxisMode: 'tick',
+      yAxisMode: 'span',
+    },
+    lineOptions: {
+      hideDots: 1,
+    },
+    animate: false,
+  }
+  if (ecdfChart == undefined || ecdfChart?.state?.datasets?.length !== datasets.length) {
+    chartEl.replaceChildren()
+    ecdfChart = new Chart(chartEl, {
+      data: chartData,
+      ...config,
+    })
+  } else {
+    ecdfChart.update({ labels: chartData.labels, datasets })
+  }
+}
+
+function renderCumPopChart() {
+  if (chartLocations.length === 0) return
+
+  const datasets: any[] = []
+  const colors: string[] = []
+
+  const first = chartLocations[0]
+  const edgeKm = first.edgeKm
+  const labels = first.cumPopData.map((d: any) => `${(d.distance * edgeKm * 2).toFixed(1)}`)
+
+  for (const loc of chartLocations) {
+    const values = loc.cumPopData.map((d: any) => d.cumPop)
+
+    datasets.push({ name: loc.city, values })
+    colors.push(loc.color)
+  }
+
+  const chartEl = document.getElementById('cumpop_chart')!
+  const chartData = {
+    labels,
+    datasets,
+  }
+  const chartTitle = chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — cumulative population versus km from centre'
+  const config = {
+    type: 'line',
+    height: 300,
+    title: chartTitle,
+    colors,
+    axisOptions: {
+      xIsSeries: true,
+      xAxisMode: 'tick',
+      yAxisMode: 'span',
+    },
+    lineOptions: {
+      hideDots: 1,
+    },
+    animate: false,
+  }
+  if (cumPopChart == undefined || cumPopChart?.state?.datasets?.length !== datasets.length) {
+    chartEl.replaceChildren()
+    cumPopChart = new Chart(chartEl, {
+      data: chartData,
+      ...config,
+    })
+  } else {
+    cumPopChart.update({ labels: chartData.labels, datasets })
+  }
 }
 
 let chart: typeof Chart | undefined
+let ecdfChart: typeof Chart | undefined
+let cumPopChart: typeof Chart | undefined
 
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())

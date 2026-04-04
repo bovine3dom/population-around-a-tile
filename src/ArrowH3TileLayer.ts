@@ -121,15 +121,17 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   }
 
   // Find all rows matching cells in a gridDisk around an h3 index
-  getCellsInRadius(h3Index: string, radius: number): { index: string[]; value: number[] }[] {
+  getCellsInRadius(h3Index: string, radius: number): { index: string[]; value: number[], weight?: number[] }[] {
     const disk = new Set(h3.gridDisk(h3Index, radius))
     const results: { index: string[]; value: number[] }[] = []
 
     for (const tileData of tileCache.values()) {
       const indices = tileData.data.index
       const values = tileData.data.value
+      const weights: number[] = tileData.data.weight ?? []
       const matchedIndices: string[] = []
       const matchedValues: number[] = []
+      const matchedWeights: number[] = []
 
       for (let i = 0; i < indices.length; i++) {
         // Convert BigInt to hex string for comparison
@@ -138,11 +140,12 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
         if (disk.has(idxStr)) {
           matchedIndices.push(idxStr)
           matchedValues.push(values[i])
+          matchedWeights.push(weights[i] ?? 1)
         }
       }
 
       if (matchedIndices.length > 0) {
-        results.push({ index: matchedIndices, value: matchedValues })
+        results.push({ index: matchedIndices, value: matchedValues, weight: matchedWeights })
       }
     }
 
