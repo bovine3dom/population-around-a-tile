@@ -7,6 +7,7 @@
         <link rel="icon" href="cow.svg" type="image/x-icon" media="(prefers-color-scheme: light)">
         <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/shoelace-autoloader.js"></script>
         <meta charset='UTF-8' />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Population around a tile</title>
         <style>
 :root {
@@ -36,10 +37,13 @@
     font-size: 8pt;
     border-radius: 0px;
 }
-@media (min-width: 768px) {
-    sl-drawer#settings {
-        --size: 40vw;
+@media (max-width: 767px) {
+    sl-drawer#settings::part(panel) {
+        height: 40vh;
+        width: 100vw;
     }
+}
+@media (min-width: 768px) {
     sl-drawer#settings::part(panel) {
         height: 100vh;
         width: 40vw;
@@ -58,7 +62,7 @@
         </div>
         <div id="widgets">
             <!-- https://shoelace.style/getting-started/usage -->
-            <sl-drawer contained="true" id="settings" label="Population around a tile" placement="top">
+            <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
                 <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=200 step=1 value=15></sl-range>
                 <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
                 <div id="results">
@@ -113,15 +117,13 @@ why did you do this?
             <sl-button size="small" onclick="document.getElementById('settings').show()">Parameters/info</sl-button>
         </div>
         <script>
+            const IS_MOBILE = navigator.userAgent.includes("Mobi")
             function updateDrawerPlacement() {
                 const drawer = document.getElementById('settings');
-                if (window.innerWidth >= 768) {
-                    drawer.placement = 'left';
-                } else {
+                if (IS_MOBILE) {
                     drawer.placement = 'top';
                 }
             }
-            window.addEventListener('resize', updateDrawerPlacement);
             window.addEventListener('DOMContentLoaded', updateDrawerPlacement);
         </script>
         <script type="module" src='app.js'></script>
