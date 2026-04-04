@@ -1,13 +1,12 @@
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { TileLayer, H3HexagonLayer } from '@deck.gl/geo-layers'
-import { BitmapLayer } from '@deck.gl/layers'
+import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import * as observablehq from './vendor/observablehq'
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
-import { ArrowH3TileLayer, tileCache, type ArrowH3TileLayerProps } from './ArrowH3TileLayer'
+import { ArrowH3TileLayer } from './ArrowH3TileLayer'
 // @ts-expect-error no types
 import { Chart } from 'frappe-charts/dist/frappe-charts.esm'
 import { findClosestCity } from './tiny-cities'
@@ -664,7 +663,7 @@ document.getElementById('desired_radius')!.addEventListener('sl-change', (e: Eve
 const params = new URLSearchParams(window.location.search)
 attributionEl.innerText =
   '© ' +
-  [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors', params.get('trains') !== null ? 'OpenRailwayMap' : null]
+  [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors']
     .filter((x) => x !== null)
     .join(' © ')
 
