@@ -82,27 +82,15 @@ what does "density weighted by populated land area" mean?
     totally unpopulated areas of land because it was like half a line of code less to do that
     and people don't live in the sea.
 
-when i move around the map why is it empty?
-    i coded the streaming part pretty lazily. just stop moving the map a second and it will load in.
-
-i want it to be faster when the radius is big
-    use a better computer like a desktop
-
-why is only europe covered?
-    i need a better computer or the time to think about how to do it without needing ~100GB of RAM
-    to convert that global population layer tiff to h3. i started work on it here
-    https://github.com/bovine3dom/grid2h3 but good luck deciphering it
-
-something else is broken and i want to complain
+something is broken and i want to complain
     file an issue https://github.com/bovine3dom/population-around-a-tile
 
 how does it work?
     nerd. code at https://github.com/bovine3dom/population-around-a-tile
 
-        - jrc population 1km (2018 coz that version includes the uk) grid reprojected to h3 with code
-          that i scribbled down in https://github.com/bovine3dom/grid2h3
+        - kontur's ghsl h3 reprojection
 
-        - that repo splits the data into a hive style directory structure so it can be streamed to
+        - split into a hive style directory structure so it can be streamed to
           the browser without needing anything more than a dumb web server
 
         - then deck.gl is used for visualisation with a maplibre map and a nice tileset from maptiler
