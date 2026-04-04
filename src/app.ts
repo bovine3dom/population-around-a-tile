@@ -568,7 +568,7 @@ function renderEcdfChart() {
   }
 
   const labels = percentiles.map(p => `${p}%`)
-  const chartTitle = chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — population density versus weighted percentile'
+  const chartTitle = chartLocations.length === 1 ? "Population density versus weighted percentile" : chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — population density versus weighted percentile'
 
   const chartEl = document.getElementById('ecdf_chart')!
   const chartData = {
@@ -623,7 +623,7 @@ function renderCumPopChart() {
     labels,
     datasets,
   }
-  const chartTitle = chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — cumulative population versus km from centre'
+  const chartTitle = chartLocations.length === 1 ? "Cumulative population versus km from centre" : chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — cumulative population versus km from centre'
   const config = {
     type: 'line',
     height: 300,
