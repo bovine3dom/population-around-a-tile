@@ -183,12 +183,11 @@ let lastLandDensity: number | undefined
 let lastPop: number | undefined
 let lastInfo: any
 
-// Chart state: array of { city, edgeKm, ringStats, centerValue }
+// Chart state: array of { city, ringStats, centerValue }
 let chartLocations: {
   city: string
   lat: number
   lon: number
-  edgeKm: number
   ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[]
   centerValue: number
   color: string
@@ -284,7 +283,6 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     for (const g of matchedTiles) {
       totalMatched += g.index.length
     }
-    console.log(matchedTiles)
 
     // Build an arquero table from matched data
     const allIndices: string[] = []
@@ -320,6 +318,10 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     lastLandDensity = (dt.rollup({ median: (d: any) => aq.op.median(d.value) }).get('median') as number)
 
     lastPop = Number(dt.rollup({ total: (d: any) => aq.op.sum(d.value) }).get('total'))
+
+    const res = h3.getResolution(dt.get('index', 0) as string)
+    const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
+    const diamKm = h3.getHexagonEdgeLengthAvg(res, 'km')*2
 
     // Log density quantiles per hollow ring
     const ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[] = []
@@ -360,14 +362,8 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
       const q25 = (ringTable.orderby('q25_dist').get('value', 0) as number)
       const q75 = (ringTable.orderby('q75_dist').get('value', 0) as number)
 
-      ringStats.push({ distance: d, median, q25, q75, count: ringValues.length })
+      ringStats.push({ distance: d * diamKm, median, q25, q75, count: ringValues.length })
     }
-
-    console.table(ringStats)
-
-    const res = h3.getResolution(dt.get('index', 0) as string)
-    const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
-    const edgeKm = h3.getHexagonEdgeLengthAvg(res, 'km')
 
     // Build ECDF data: sorted values with cumulative weight
     const sortedDt = aq.table({ index: allIndices, value: allValues, weight: allWeights })
@@ -409,18 +405,22 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
         }
       }
       runningPop += ringPop
-      cumPopData.push({ distance: d, cumPop: runningPop * areaKm2 })
+      cumPopData.push({ distance: d*diamKm, cumPop: runningPop })
     }
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
     const centerLon = h3.cellToLatLng(clickedIndex)[1]
     const cityLabel = findClosestCity(centerLat, centerLon)
     const centerValue = (dt.get('value', 0) as number)
+    console.log(cityLabel)
+    console.table(ringStats)
+    console.table(ecdfData)
+    console.table(cumPopData)
 
     // Build or append chart data
     if (append) {
-      chartLocations.push({ city: cityLabel, lat: centerLat, lon: centerLon, edgeKm, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length], ecdfData, cumPopData })
+      chartLocations.push({ city: cityLabel, lat: centerLat, lon: centerLon, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length], ecdfData, cumPopData })
     } else {
-      chartLocations = [{ city: cityLabel, lat: centerLat, lon: centerLon, edgeKm, ringStats, centerValue, color: COLORS[0], ecdfData, cumPopData }]
+      chartLocations = [{ city: cityLabel, lat: centerLat, lon: centerLon, ringStats, centerValue, color: COLORS[0], ecdfData, cumPopData }]
     }
 
     renderChart()
@@ -442,18 +442,9 @@ function renderChart() {
 
   // Build symmetric labels from the first location
   const first = chartLocations[0]
-  const edgeKm = first.edgeKm
-  const maxDist = first.ringStats.length > 0 ? first.ringStats[first.ringStats.length - 1].distance : 0
+  const maxDist = first.ringStats.length
 
   const mirroredLabels: string[] = []
-  for (let d = maxDist; d >= 1; d--) {
-    mirroredLabels.push(`-${(d * edgeKm * 2).toFixed(1)}`)
-  }
-  mirroredLabels.push('0')
-  for (let d = 1; d <= maxDist; d++) {
-    mirroredLabels.push(`${(d * edgeKm * 2).toFixed(1)}`)
-  }
-
   const datasets: any[] = []
 
   if (chartLocations.length === 1) {
@@ -463,14 +454,16 @@ function renderChart() {
     const q25Vals: number[] = []
     const q75Vals: number[] = []
 
-    for (let d = maxDist; d >= 1; d--) {
-      const stat = loc.ringStats.find(r => r.distance === d)
+    for (let d = maxDist - 1; d >= 1; d--) {
+      const stat = loc.ringStats[d]
+      mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
       medianVals.push(stat ? stat.median : 0)
       q25Vals.push(stat ? stat.q25 : 0)
       q75Vals.push(stat ? stat.q75 : 0)
     }
-    for (let d = 0; d <= maxDist; d++) {
-      const stat = loc.ringStats.find(r => r.distance === d)
+    for (let d = 0; d < maxDist; d++) {
+      const stat = loc.ringStats[d]
+      mirroredLabels.push(`${stat?.distance.toFixed(1)}`)
       medianVals.push(stat ? stat.median : 0)
       q25Vals.push(stat ? stat.q25 : 0)
       q75Vals.push(stat ? stat.q75 : 0)
@@ -482,18 +475,22 @@ function renderChart() {
       { name: '75th percentile', values: q75Vals },
     )
   } else {
-    // Multiple cities: only median, one line per city
+    // todo: reject non-uniform distances
+    let l = 1;
     for (const loc of chartLocations) {
       const vals: number[] = []
-      for (let d = maxDist; d >= 1; d--) {
-        const stat = loc.ringStats.find(r => r.distance === d)
+      for (let d = maxDist - 1; d >= 1; d--) {
+        const stat = loc.ringStats[d]
+        l == 1 && mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
         vals.push(stat ? stat.median : 0)
       }
-      for (let d = 0; d <= maxDist; d++) {
-        const stat = loc.ringStats.find(r => r.distance === d)
+      for (let d = 0; d < maxDist; d++) {
+        const stat = loc.ringStats[d]
+        l == 1 && mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
         vals.push(stat ? stat.median : 0)
       }
       datasets.push({ name: loc.city, values: vals })
+      l++
     }
   }
 
@@ -608,8 +605,7 @@ function renderCumPopChart() {
   const colors: string[] = []
 
   const first = chartLocations[0]
-  const edgeKm = first.edgeKm
-  const labels = first.cumPopData.map((d: any) => `${(d.distance * edgeKm * 2).toFixed(1)}`)
+  const labels = first.cumPopData.map((d: any) => `${d.distance.toFixed(1)}`)
 
   for (const loc of chartLocations) {
     const values = loc.cumPopData.map((d: any) => d.cumPop)
