@@ -123,12 +123,12 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   // Find all rows matching cells in a gridDisk around an h3 index
   getCellsInRadius(h3Index: string, radius: number): { index: string[]; value: number[], weight?: number[] }[] {
     const disk = new Set(h3.gridDisk(h3Index, radius))
-    const results: { index: string[]; value: number[] }[] = []
+    const results: { index: string[]; value: number[]; weight?: number[] }[] = []
 
     for (const tileData of tileCache.values()) {
       const indices = tileData.data.index
       const values = tileData.data.value
-      const weights: number[] = tileData.data.weight ?? []
+      const weights: number[] = tileData.data.weight as number[] ?? []
       const matchedIndices: string[] = []
       const matchedValues: number[] = []
       const matchedWeights: number[] = []
