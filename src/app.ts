@@ -79,15 +79,28 @@ function chQuery(query: string): Promise<Response> {
   })
 }
 
-const chquerygen = ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
+let RESOLUTION_MODIFIER = 0
+const chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3)}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
   `
   return chQuery(query)
-}
+})
+
+// there has to be a more ergonomic way to do this
+const chquerygen_baked = new Map<number, any>([
+  [-3, chquerygen(-3)],
+  [-2, chquerygen(-2)],
+  [-1, chquerygen(-1)],
+  [0, chquerygen(0)],
+  [1, chquerygen(1)],
+  [2, chquerygen(2)],
+  [3, chquerygen(3)],
+])
+console.log(chquerygen_baked)
 
 // ---- Legend ----
 let legendElement: SVGSVGElement | null = null
@@ -164,16 +177,17 @@ function updateLegend() {
   attributionEl.insertBefore(legendElement, attributionEl.firstChild)
 
   // Force re-render of hex layers by updating the colorDomain trigger
+  h3Layer = new ArrowH3TileLayer({
+    id: 'H3TileLayer',
+    // @ts-expect-error custom data function
+    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+    pickable: true,
+    getFillColor: getColour,
+    colorDomain: [q01, q99],
+    onDataChange: throttledUpdateLegend,
+  })
   mapOverlay.setProps({
-    layers: [new ArrowH3TileLayer({
-      id: 'H3TileLayer',
-      // @ts-expect-error custom data function
-      data: chquerygen,
-      pickable: true,
-      getFillColor: getColour,
-      colorDomain: [q01, q99],
-      onDataChange: throttledUpdateLegend,
-    })],
+    layers: [h3Layer],
   })
 }
 
@@ -197,10 +211,10 @@ let chartLocations: {
 
 const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db', '#00ced1', '#ffd700']
 
-const h3Layer = new ArrowH3TileLayer({
+let h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
   // @ts-expect-error custom data function
-  data: chquerygen,
+  data: chquerygen_baked.get(RESOLUTION_MODIFIER),
   pickable: true,
   getFillColor: getColour,
   colorDomain: [0, 1],
@@ -661,6 +675,22 @@ document.getElementById('desired_radius')!.addEventListener('sl-change', (e: Eve
   makeHighlight(lastInfo, radius)
 })
 
+document.getElementById('resolution_modifier')!.addEventListener('sl-change', (e: Event) => {
+  RESOLUTION_MODIFIER = Number((e.target as HTMLInputElement).value)
+  h3Layer = new ArrowH3TileLayer({
+    id: 'H3TileLayer',
+    // @ts-expect-error custom data function
+    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+    pickable: true,
+    getFillColor: getColour,
+    colorDomain: [0, 1],
+    onDataChange: throttledUpdateLegend,
+  })
+  mapOverlay.setProps({
+    layers: [h3Layer],
+  })
+})
+
 // ---- Attribution ----
 const params = new URLSearchParams(window.location.search)
 const colourByWeights = params.get('w') != undefined
@@ -674,8 +704,7 @@ attributionEl.innerText =
 map.on('moveend', () => {
   const pos = map.getCenter()
   const z = map.getZoom()
-  window.location.replace(`#x=${pos.lng}&y=${pos.lat}&z=${z}`)
-  // window.location.hash = `x=${pos.lng}&y=${pos.lat}&z=${z}`
+  history.replaceState(null, '', `#x=${pos.lng.toFixed(4)}&y=${pos.lat.toFixed(4)}&z=${z.toFixed(4)}`)
 })
 
 // ---- Favicon ----

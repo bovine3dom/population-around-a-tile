@@ -52,6 +52,11 @@
 :not(:defined) {
       visibility: hidden;
 }
+#settings-button {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+}
         </style>
 <!-- #legend { position: absolute; z-index: 1; background-color: rgba(255, 255, 255, 0.6); color: rgba(0, 0, 0, 0.6); top: 0; right: 0; font-family: "Helvetica Neue", "sans-serif"; font-size: 8pt; border-radius: 0px; } #legend text { stroke: white; stroke-width: 2px; paint-order: stroke; } -->
     </head>
@@ -63,7 +68,7 @@
         <div id="widgets">
             <!-- https://shoelace.style/getting-started/usage -->
             <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
-                <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=200 step=1 value=15></sl-range>
+                <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=50 step=1 value=15></sl-range>
                 <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
                 <div id="results">
                     <p id="results_text">click somewhere on the map to get the population and population density within the selected radius</p>
@@ -116,6 +121,10 @@ why did you do this?
             </sl-drawer>
             <sl-button size="small" onclick="document.getElementById('settings').show()">Graphs/faq</sl-button>
         </div>
+        <sl-button id="settings-button" size="small" onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
+        <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
+            <sl-range id="resolution_modifier" label="Resolution (high values computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
+        </sl-drawer>
         <script>
             const IS_MOBILE = navigator.userAgent.includes("Mobi")
             function updateDrawerPlacement() {
