@@ -179,9 +179,9 @@ function updateLegend() {
   // Force re-render of hex layers by updating the colorDomain trigger
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
-    // @ts-expect-error custom data function
     data: chquerygen_baked.get(RESOLUTION_MODIFIER),
     pickable: true,
+    // @ts-expect-error custom data function
     getFillColor: getColour,
     colorDomain: [q01, q99],
     onDataChange: throttledUpdateLegend,
@@ -213,9 +213,9 @@ const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db'
 
 let h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
-  // @ts-expect-error custom data function
   data: chquerygen_baked.get(RESOLUTION_MODIFIER),
   pickable: true,
+  // @ts-expect-error custom data function
   getFillColor: getColour,
   colorDomain: [0, 1],
   onDataChange: throttledUpdateLegend,
@@ -223,12 +223,16 @@ let h3Layer = new ArrowH3TileLayer({
 
 // Capture shift state at mousedown time (before keyup can interfere)
 let clickShiftState = false
+let accumulateCities = false
 document.addEventListener('mousedown', (e) => { clickShiftState = e.shiftKey })
+document.getElementById('accumulate_cities')!.addEventListener('sl-change', (e: Event) => {
+  accumulateCities = (e.target as HTMLInputElement).checked
+})
 
 const mapOverlay = new MapboxOverlay({
   interleaved: false,
   onClick: (info: any) => {
-    makeHighlight(info, undefined, clickShiftState)
+    makeHighlight(info, undefined, clickShiftState || accumulateCities)
   },
   getTooltip: (info: any) => {
     if (info.index === undefined || !info.sourceTile?.content?.data) return null
@@ -679,9 +683,9 @@ document.getElementById('resolution_modifier')!.addEventListener('sl-change', (e
   RESOLUTION_MODIFIER = Number((e.target as HTMLInputElement).value)
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
-    // @ts-expect-error custom data function
     data: chquerygen_baked.get(RESOLUTION_MODIFIER),
     pickable: true,
+    // @ts-expect-error custom data function
     getFillColor: getColour,
     colorDomain: [0, 1],
     onDataChange: throttledUpdateLegend,

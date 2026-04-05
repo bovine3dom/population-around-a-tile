@@ -123,7 +123,9 @@ why did you do this?
         </div>
         <sl-button id="settings-button" size="small" onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
         <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
-            <sl-range id="resolution_modifier" label="Resolution (high values computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
+            <sl-range id="resolution_modifier" label="Resolution" help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
+            <br/>
+            <sl-checkbox id="accumulate_cities" help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities on click</sl-checkbox>
         </sl-drawer>
         <script>
             const IS_MOBILE = navigator.userAgent.includes("Mobi")
