@@ -45,7 +45,7 @@ const map = new maplibregl.Map({
 const colourSchemes = Object.keys(d3s).filter(k => k.startsWith('interpolate') && typeof (d3s as any)[k] === 'function')
 const _csParam = new URLSearchParams(window.location.search).get('cs')
 let currentColourScheme: string = colourSchemes.includes(_csParam ?? '') ? _csParam! : 'interpolateSpectral'
-let colourInverted = new URLSearchParams(window.location.search).has('ci')
+let colourInverted = new URLSearchParams(window.location.search).get('ci') == '1'
 const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
 
 // Populate colour scheme dropdown (after Shoelace loads)
