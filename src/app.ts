@@ -46,6 +46,17 @@ const colourRamp = d3.scaleSequential(d3.interpolateSpectral).domain([0, 1])
 let getQuantile: ((v: number) => number) | undefined
 let getValueFromQuantile: ((q: number) => number) | undefined
 
+// prevent dumb reactivity on function factories
+function memoise<TArg, TResult>(fn: (arg: TArg) => TResult) {
+  const cache = new Map<TArg, TResult>()
+  return (arg: TArg): TResult => {
+    if (!cache.has(arg)) {
+      cache.set(arg, fn(arg))
+    }
+    return cache.get(arg)!
+  }
+}
+
 const getColour = (v: number): [number, number, number, number] => {
   const q = getQuantile ? getQuantile(v) : 0
   const c = d3.color(colourRamp(q))!
@@ -66,7 +77,7 @@ function chQuery(query: string): Promise<Response> {
 }
 
 let RESOLUTION_MODIFIER = 0
-const chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
+const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
       select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
       from public_kontur_population_20231101
@@ -75,17 +86,7 @@ const chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: {
   `
   return chQuery(query)
 })
-
-// there has to be a more ergonomic way to do this
-const chquerygen_baked = new Map<number, any>([
-  [-3, chquerygen(-3)],
-  [-2, chquerygen(-2)],
-  [-1, chquerygen(-1)],
-  [0, chquerygen(0)],
-  [1, chquerygen(1)],
-  [2, chquerygen(2)],
-  [3, chquerygen(3)],
-])
+const chquerygen = memoise(_chquerygen)
 
 // ---- Legend ----
 let legendElement: SVGSVGElement | null = null
@@ -100,36 +101,12 @@ function throttledUpdateLegend() {
     wantsUpdate = true
     return
   }
-  updateLegend()
+  updateLegend(colourByWeights)
   legendThrottleTimer = setTimeout(() => {
     legendThrottleTimer = null
-    wantsUpdate && updateLegend()
+    wantsUpdate && updateLegend(colourByWeights)
     wantsUpdate = false
   }, 1000)
-}
-
-// Weighted quantile: sorts values by v, uses weights to find quantile positions
-function weightedQuantile(values: number[], weights: number[], p: number): number {
-  // Create index array and sort by values
-  const idx = values.map((_, i) => i)
-  idx.sort((a, b) => values[a] - values[b])
-
-  // ?w easter egg - colour by weights
-  if (!colourByWeights) {
-    weights = new Array(values.length).fill(1)
-  }
-
-  let cumWeight = 0
-  const totalWeight = weights.reduce((s, w) => s + w, 0)
-  const target = p * totalWeight
-
-  for (const i of idx) {
-    cumWeight += weights[i]
-    if (cumWeight >= target) {
-      return values[i]
-    }
-  }
-  return values[idx[idx.length - 1]]
 }
 
 function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
@@ -157,7 +134,7 @@ function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: numb
   return { getQuantile, getValueFromQuantile }
 }
 
-function updateLegend() {
+function updateLegend(colourByWeights: boolean) {
   const { values, weights } = h3Layer.getSampleValuesAndWeights(100_000)
   if (values.length === 0) return
 
@@ -184,7 +161,7 @@ function updateLegend() {
   // Force re-render of hex layers
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
-    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+    data: chquerygen(RESOLUTION_MODIFIER),
     pickable: true,
     // @ts-expect-error custom data function
     getFillColor: getColour,
@@ -218,7 +195,7 @@ const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db'
 
 let h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
-  data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+  data: chquerygen(RESOLUTION_MODIFIER),
   pickable: true,
   // @ts-expect-error custom data function
   getFillColor: getColour,
@@ -688,7 +665,7 @@ document.getElementById('resolution_modifier')!.addEventListener('sl-change', (e
   RESOLUTION_MODIFIER = Number((e.target as HTMLInputElement).value)
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
-    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+    data: chquerygen(RESOLUTION_MODIFIER),
     pickable: true,
     // @ts-expect-error custom data function
     getFillColor: getColour,
@@ -702,7 +679,7 @@ document.getElementById('resolution_modifier')!.addEventListener('sl-change', (e
 
 // ---- Attribution ----
 const params = new URLSearchParams(window.location.search)
-const colourByWeights = params.get('w') != undefined
+let colourByWeights = params.get('w') != undefined
 attributionEl.innerText =
   '© ' +
   [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors']
