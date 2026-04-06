@@ -51,7 +51,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
   // Sample values and optional weights for weighted quantile computation
   getSampleValuesAndWeights(maxSamples: number = 100_000): { values: number[]; weights?: number[] } {
-    const tileset = this.state.tileset
+    const tileset = this?.state?.tileset
     if (!tileset) return { values: [] }
 
     // Only sample from tiles that are currently visible in the viewport

@@ -41,29 +41,15 @@ const map = new maplibregl.Map({
   boxZoom: false,
 })
 
-interface Metadata {
-  scale: Record<string, number>
-}
-
-let METADATA: Metadata | undefined
-async function getMetadata(): Promise<Metadata> {
-  if (!METADATA) {
-    METADATA = await (await fetch(`data/JRC_POPULATION_2018_H3_by_rnd/meta.json`)).json()
-  }
-  return METADATA!
-}
-
 // Shared colour ramp — domain updated dynamically from loaded tile values
 const colourRamp = d3.scaleSequential(d3.interpolateSpectral).domain([0, 1])
-let colourDomain: [number, number] = [0, 0]
+let getQuantile: ((v: number) => number) | undefined
+let getValueFromQuantile: ((q: number) => number) | undefined
 
 const getColour = (v: number): [number, number, number, number] => {
-  const c = d3.color(colourRamp(v))!
+  const q = getQuantile ? getQuantile(v) : 0
+  const c = d3.color(colourRamp(q))!
   const rgb = c.formatRgb().match(/[\d.]+/g)!.map(Number)
-  // Normalise v for opacity: clamp to domain, then 0-1
-  const [lo, hi] = colourDomain
-  const normalised = lo === hi ? 0 : Math.max(0, Math.min(1, (v - lo) / (hi - lo)))
-  // return [rgb[0], rgb[1], rgb[2], Math.sqrt(normalised) * 255]
   return [rgb[0], rgb[1], rgb[2], 255]
 }
 
@@ -100,7 +86,6 @@ const chquerygen_baked = new Map<number, any>([
   [2, chquerygen(2)],
   [3, chquerygen(3)],
 ])
-console.log(chquerygen_baked)
 
 // ---- Legend ----
 let legendElement: SVGSVGElement | null = null
@@ -147,43 +132,63 @@ function weightedQuantile(values: number[], weights: number[], p: number): numbe
   return values[idx[idx.length - 1]]
 }
 
+function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
+  const sampleSize = Math.min(256, values.length)
+  const indices = Array.from({ length: sampleSize }, () => Math.floor(Math.random() * values.length))
+  const pairs = indices.map(i => [values[i], weights ? weights[i] : 1] as [number, number])
+  pairs.sort((a, b) => a[0] - b[0])
+  const sortedValues = pairs.map(([v]) => v)
+  const sortedWeights = pairs.map(([, w]) => w)
+  let cumW = 0
+  const totalW = sortedWeights.reduce((s, w) => s + w, 0)
+  const quantiles = sortedWeights.map(w => { cumW += w; return cumW / totalW })
+
+  const getQuantile = (target: number): number => {
+    const idx = sortedValues.findIndex(v => v > target)
+    return idx === -1 ? 1 : quantiles[idx]
+  }
+
+  const getValueFromQuantile = (target: number): number => {
+    const trimTarget = Math.min(Math.max(0.01, target), 0.99)
+    const idx = quantiles.findIndex(q => q > trimTarget)
+    return idx === -1 ? sortedValues[sortedValues.length - 1] : sortedValues[idx]
+  }
+
+  return { getQuantile, getValueFromQuantile }
+}
+
 function updateLegend() {
   const { values, weights } = h3Layer.getSampleValuesAndWeights(100_000)
   if (values.length === 0) return
 
-  let q01: number, q99: number
+  const effectiveWeights = colourByWeights && weights && weights.length === values.length ? weights : new Array(values.length).fill(1)
 
-  if (weights && weights.length === values.length) {
-    // Weighted quantiles
-    q01 = weightedQuantile(values, weights, 0.01)
-    q99 = weightedQuantile(values, weights, 0.99)
-  } else {
-    // Unweighted
-    values.sort((a, b) => a - b)
-    q01 = d3.quantile(values, 0.01) ?? 0
-    q99 = d3.quantile(values, 0.99) ?? 1
+  // Build ECDF
+  const ecdf = buildEcdf(values, effectiveWeights)
+  getQuantile = ecdf.getQuantile
+  getValueFromQuantile = ecdf.getValueFromQuantile
+
+  // Re-render legend with quantile-based ticks
+  const tickFormat = (v: number) => {
+    const rawValue = ecdf.getValueFromQuantile(v)
+    const rounded = parseFloat(rawValue.toPrecision(2))
+    return rounded.toLocaleString()
   }
-
-  colourDomain = [q01, q99]
-  colourRamp.domain(colourDomain)
-
-  // Re-render legend
-  const fmt = d3.format('.0f')
 
   if (legendElement) {
     legendElement.remove()
   }
-  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km^2', tickFormat: fmt })
+  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km^2', tickFormat })
   attributionEl.insertBefore(legendElement, attributionEl.firstChild)
 
-  // Force re-render of hex layers by updating the colorDomain trigger
+  // Force re-render of hex layers
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
     data: chquerygen_baked.get(RESOLUTION_MODIFIER),
     pickable: true,
     // @ts-expect-error custom data function
     getFillColor: getColour,
-    colorDomain: [q01, q99],
+    colorDomain: [0, 1],
     onDataChange: throttledUpdateLegend,
   })
   mapOverlay.setProps({
