@@ -120640,7 +120640,13 @@ var accumulateCities = _urlParams.has("acc") && _urlParams.get("acc") !== "0" &&
 var colourByWeights = _urlParams.has("w") && _urlParams.get("w") !== "0" && _urlParams.get("w") !== "false";
 var _chquerygen = (RESOLUTION_MODIFIER2) => ({ h3Index, resolution }) => {
   const query2 = `
-      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER2}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER2}, h3GetResolution(h3))) index,
+      sum(population)/(h3CellAreaM2(index)/(1000*1000)) _value,
+      if(_value = 0, 0, 
+          round(_value * pow(10, 3 - 1 - floor(log10(abs(_value))))) 
+          / pow(10, 3 - 1 - floor(log10(abs(_value))))
+      ) AS value,
+      sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
@@ -121310,5 +121316,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=8081F21F6BAD8F4F64756E2164756E21
+//# debugId=55A284DD7707071464756E2164756E21
 //# sourceMappingURL=app.js.map

@@ -84,7 +84,13 @@ let accumulateCities = _urlParams.has('acc') && _urlParams.get('acc') !== '0' &&
 let colourByWeights = _urlParams.has('w') && _urlParams.get('w') !== '0' && _urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
+      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
+      sum(population)/(h3CellAreaM2(index)/(1000*1000)) _value,
+      if(_value = 0, 0, 
+          round(_value * pow(10, 3 - 1 - floor(log10(abs(_value))))) 
+          / pow(10, 3 - 1 - floor(log10(abs(_value))))
+      ) AS value,
+      sum(population) weight
       from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
