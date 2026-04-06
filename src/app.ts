@@ -792,6 +792,41 @@ attributionEl.innerText =
     .filter((x) => x !== null)
     .join(' © ')
 
+// ---- Keyboard navigation ----
+const PAN_DELTA = 100
+const ZOOM_DELTA = 1
+document.addEventListener('keydown', (e) => {
+  // futureproof: don't capture if user is typing in an input
+  const tag = (e.target as HTMLElement).tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea') return
+
+  const dx = (() => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') return -PAN_DELTA
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') return PAN_DELTA
+    return 0
+  })()
+  const dy = (() => {
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') return -PAN_DELTA
+    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') return PAN_DELTA
+    return 0
+  })()
+  const zoom = (() => {
+    if (e.key === '+' || e.key === '=' || e.key === 'e' || e.key === 'E') return ZOOM_DELTA
+    if (e.key === '-' || e.key === '_' || e.key === 'q' || e.key === 'Q') return -ZOOM_DELTA
+    return 0
+  })()
+
+  if (dx || dy) {
+    map.panBy([dx, dy], { animate: true, duration: 200 })
+    e.preventDefault()
+  }
+  if (zoom) {
+    if (zoom > 0) map.zoomIn({ animate: true, duration: 200 })
+    else map.zoomOut({ animate: true, duration: 200 })
+    e.preventDefault()
+  }
+})
+
 // ---- Hash updates ----
 map.on('moveend', () => {
   const pos = map.getCenter()

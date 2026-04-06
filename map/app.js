@@ -121202,6 +121202,45 @@ var params = new URLSearchParams(window.location.search);
 attributionEl.innerText = "© " + [params.get("c"), "bovine3dom", "Mapterhorn", "Versatiles", `GEBCO
 `, "Natural Earth", "Kontur", "GHSL", `OpenFreeMap
 `, "OpenStreetMap contributors"].filter((x2) => x2 !== null).join(" © ");
+var PAN_DELTA = 100;
+var ZOOM_DELTA = 1;
+document.addEventListener("keydown", (e3) => {
+  const tag = e3.target.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea")
+    return;
+  const dx = (() => {
+    if (e3.key === "ArrowLeft" || e3.key === "a" || e3.key === "A")
+      return -PAN_DELTA;
+    if (e3.key === "ArrowRight" || e3.key === "d" || e3.key === "D")
+      return PAN_DELTA;
+    return 0;
+  })();
+  const dy = (() => {
+    if (e3.key === "ArrowUp" || e3.key === "w" || e3.key === "W")
+      return -PAN_DELTA;
+    if (e3.key === "ArrowDown" || e3.key === "s" || e3.key === "S")
+      return PAN_DELTA;
+    return 0;
+  })();
+  const zoom = (() => {
+    if (e3.key === "+" || e3.key === "=" || e3.key === "e" || e3.key === "E")
+      return ZOOM_DELTA;
+    if (e3.key === "-" || e3.key === "_" || e3.key === "q" || e3.key === "Q")
+      return -ZOOM_DELTA;
+    return 0;
+  })();
+  if (dx || dy) {
+    map4.panBy([dx, dy], { animate: true, duration: 200 });
+    e3.preventDefault();
+  }
+  if (zoom) {
+    if (zoom > 0)
+      map4.zoomIn({ animate: true, duration: 200 });
+    else
+      map4.zoomOut({ animate: true, duration: 200 });
+    e3.preventDefault();
+  }
+});
 map4.on("moveend", () => {
   const pos = map4.getCenter();
   const z2 = map4.getZoom();
@@ -121214,5 +121253,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=19347FBE51AEB41A64756E2164756E21
+//# debugId=FF2FC193D7C6CAFB64756E2164756E21
 //# sourceMappingURL=app.js.map
