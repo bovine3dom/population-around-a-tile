@@ -2,6 +2,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
+import * as d3s from 'd3-scale-chromatic'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import * as observablehq from './vendor/observablehq'
 import * as aq from 'arquero'
@@ -42,8 +43,24 @@ const map = new maplibregl.Map({
   boxZoom: false,
 })
 
-// Shared colour ramp — domain updated dynamically from loaded tile values
-const colourRamp = d3.scaleSequential(d3.interpolateSpectral).domain([0, 1])
+const colourSchemes = Object.keys(d3s).filter(k => k.startsWith('interpolate') && typeof (d3s as any)[k] === 'function')
+const _csParam = new URLSearchParams(window.location.search).get('cs')
+let currentColourScheme: string = colourSchemes.includes(_csParam ?? '') ? _csParam! : 'interpolateSpectral'
+let colourInverted = new URLSearchParams(window.location.search).has('ci')
+const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
+
+// Populate colour scheme dropdown (after Shoelace loads)
+customElements.whenDefined('sl-select').then(() => {
+  const colourSchemeSelect = document.getElementById('colour_scheme') as any
+  if (colourSchemeSelect) {
+    for (const scheme of colourSchemes.sort()) {
+      const option = document.createElement('sl-option') as any
+      option.value = scheme
+      option.textContent = scheme.replace('interpolate', '')
+      colourSchemeSelect.appendChild(option)
+    }
+  }
+})
 let getQuantile: ((v: number) => number) | undefined
 let getValueFromQuantile: ((q: number) => number) | undefined
 
@@ -78,10 +95,10 @@ function chQuery(query: string): Promise<Response> {
   })
 }
 
-const _urlParams = new URLSearchParams(window.location.search)
-let RESOLUTION_MODIFIER = _urlParams.has('res') ? Number(_urlParams.get('res')) : 0
-let accumulateCities = _urlParams.has('acc') && _urlParams.get('acc') !== '0' && _urlParams.get('acc') !== 'false'
-let colourByWeights = _urlParams.has('w') && _urlParams.get('w') !== '0' && _urlParams.get('w') !== 'false'
+const urlParams = new URLSearchParams(window.location.search)
+let RESOLUTION_MODIFIER = urlParams.has('res') ? Number(urlParams.get('res')) : 0
+let accumulateCities = urlParams.has('acc') && urlParams.get('acc') !== '0' && urlParams.get('acc') !== 'false'
+let colourByWeights = urlParams.has('w') && urlParams.get('w') !== '0' && urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
       select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
@@ -147,7 +164,7 @@ function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: numb
 }
 
 function updateLegend(colourByWeights: boolean) {
-  const { values, weights } = h3Layer.getSampleValuesAndWeights(100_000)
+  const { values, weights } = h3Layer.getSampleValuesAndWeights(1_000)
   if (values.length === 0) return
 
   const effectiveWeights = colourByWeights && weights && weights.length === values.length ? weights : new Array(values.length).fill(1)
@@ -724,7 +741,6 @@ function readSettingFromElement(el: HTMLElement, spec: SettingSpec<any>): any {
   return (el as any).value
 }
 
-// ---- Register settings ----
 registerSetting<number>({
   param: 'res',
   default: 0,
@@ -788,6 +804,57 @@ registerSetting<boolean>({
     mapOverlay.setProps({
       layers: [h3Layer],
     })
+  },
+})
+
+registerSetting<string>({
+  param: 'cs',
+  default: 'interpolateSpectral',
+  parse: (raw) => {
+    if (raw === null) return 'interpolateSpectral'
+    return colourSchemes.includes(raw) ? raw : 'interpolateSpectral'
+  },
+  serialize: (v) => v,
+  onChange: (value) => {
+    currentColourScheme = value
+    colourRamp.interpolator((d3s as any)[value])
+    h3Layer = new ArrowH3TileLayer({
+      id: 'H3TileLayer',
+      // @ts-expect-error custom data function and layer type
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile!),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights),
+    })
+    mapOverlay.setProps({
+      layers: [h3Layer],
+    })
+    updateLegend(colourByWeights)
+  },
+})
+
+registerSetting<boolean>({
+  param: 'ci',
+  default: false,
+  parse: (raw) => raw !== null && raw !== '0' && raw !== 'false',
+  serialize: (v) => v ? '1' : '0',
+  onChange: (value) => {
+    colourInverted = value
+    colourRamp.domain(value ? [1, 0] : [0, 1])
+    h3Layer = new ArrowH3TileLayer({
+      id: 'H3TileLayer',
+      // @ts-expect-error custom data function and layer type
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile!),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights),
+    })
+    mapOverlay.setProps({
+      layers: [h3Layer],
+    })
+    // updateLegend(colourByWeights) // todo: fix
   },
 })
 
@@ -855,6 +922,18 @@ if (citySearchEl) {
 
   citySearchEl.addEventListener('sl-clear', () => {
     dropdown.hide()
+  })
+
+  citySearchEl.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const results = searchCities(citySearchEl.value)
+      if (results.length > 0) {
+        const r = results[0]
+        citySearchEl.value = r.label
+        dropdown.hide()
+        map.flyTo({ center: [r.lon, r.lat], zoom: 12, duration: 1500 })
+      }
+    }
   })
 }
 
