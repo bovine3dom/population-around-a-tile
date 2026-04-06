@@ -121202,11 +121202,68 @@ var params = new URLSearchParams(window.location.search);
 attributionEl.innerText = "© " + [params.get("c"), "bovine3dom", "Mapterhorn", "Versatiles", `GEBCO
 `, "Natural Earth", "Kontur", "GHSL", `OpenFreeMap
 `, "OpenStreetMap contributors"].filter((x2) => x2 !== null).join(" © ");
+var citySearchEl = document.getElementById("city_search");
+var MAX_RESULTS = 10;
+function searchCities(query2) {
+  if (!query2)
+    return [];
+  const q2 = query2.toLowerCase();
+  return tiny_cities_default.filter((c2) => c2.name.toLowerCase().startsWith(q2) || c2.country_code.toLowerCase().startsWith(q2)).slice(0, MAX_RESULTS).map((c2) => ({
+    label: `${c2.name}, ${c2.country_code}`,
+    lat: c2.latitude,
+    lon: c2.longitude
+  }));
+}
+if (citySearchEl) {
+  let showResults = function(query2) {
+    const results = searchCities(query2);
+    menu.innerHTML = "";
+    if (!results.length) {
+      dropdown.hide();
+      return;
+    }
+    for (const r2 of results) {
+      const item = document.createElement("sl-menu-item");
+      item.textContent = r2.label;
+      item.addEventListener("click", () => {
+        citySearchEl.value = r2.label;
+        dropdown.hide();
+        map4.flyTo({ center: [r2.lon, r2.lat], zoom: 12, duration: 1500 });
+      });
+      menu.appendChild(item);
+    }
+    dropdown.show();
+  };
+  const dropdown = document.createElement("sl-dropdown");
+  dropdown.containment = "viewport";
+  dropdown.hoist = true;
+  dropdown.placement = "bottom-start";
+  dropdown.distance = 4;
+  citySearchEl.replaceWith(dropdown);
+  dropdown.appendChild(citySearchEl);
+  citySearchEl.slot = "trigger";
+  const menu = document.createElement("sl-menu");
+  dropdown.appendChild(menu);
+  citySearchEl.addEventListener("sl-input", () => {
+    showResults(citySearchEl.value);
+  });
+  citySearchEl.addEventListener("sl-clear", () => {
+    dropdown.hide();
+  });
+}
 var PAN_DELTA = 100;
 var ZOOM_DELTA = 1;
 document.addEventListener("keydown", (e3) => {
-  const tag = e3.target.tagName.toLowerCase();
-  if (tag === "input" || tag === "textarea")
+  const el = e3.target;
+  const tag = el.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "sl-input" || tag === "sl-select" || tag === "sl-textarea")
+    return;
+  if (el.closest("sl-input, sl-select, sl-textarea"))
+    return;
+  if (e3.composedPath().some((n2) => {
+    const t3 = n2.tagName?.toLowerCase();
+    return t3 === "sl-input" || t3 === "sl-select" || t3 === "sl-textarea";
+  }))
     return;
   const dx = (() => {
     if (e3.key === "ArrowLeft" || e3.key === "a" || e3.key === "A")
@@ -121253,5 +121310,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=FF2FC193D7C6CAFB64756E2164756E21
+//# debugId=8081F21F6BAD8F4F64756E2164756E21
 //# sourceMappingURL=app.js.map

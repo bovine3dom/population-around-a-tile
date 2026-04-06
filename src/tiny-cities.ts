@@ -2,8 +2,6 @@ import tinyCities from './tiny-cities.json';
 import KDBush from 'kdbush';
 import { around } from 'geokdbush';
 
-type CityDb = { cities: any[]; tree: KDBush }
-
 const tree = new KDBush(tinyCities.length)
 for (const { latitude, longitude } of tinyCities) {
     tree.add(longitude, latitude)

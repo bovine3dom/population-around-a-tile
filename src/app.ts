@@ -10,6 +10,7 @@ import { ArrowH3TileLayer } from './ArrowH3TileLayer'
 // @ts-expect-error no types
 import { Chart } from 'frappe-charts/dist/frappe-charts.esm'
 import { findClosestCity } from './tiny-cities'
+import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
 
 const username = 'public_web';
@@ -792,13 +793,78 @@ attributionEl.innerText =
     .filter((x) => x !== null)
     .join(' © ')
 
+const citySearchEl = document.getElementById('city_search') as any
+const MAX_RESULTS = 10
+
+function searchCities(query: string): Array<{ label: string; lat: number; lon: number }> {
+  if (!query) return []
+  const q = query.toLowerCase()
+  return tinyCities
+    .filter(c => c.name.toLowerCase().startsWith(q) || c.country_code.toLowerCase().startsWith(q))
+    .slice(0, MAX_RESULTS)
+    .map(c => ({
+      label: `${c.name}, ${c.country_code}`,
+      lat: c.latitude,
+      lon: c.longitude,
+    }))
+}
+
+if (citySearchEl) {
+  const dropdown = document.createElement('sl-dropdown') as any
+  dropdown.containment = 'viewport'
+  dropdown.hoist = true
+  dropdown.placement = 'bottom-start'
+  dropdown.distance = 4
+
+  citySearchEl.replaceWith(dropdown)
+  dropdown.appendChild(citySearchEl)
+  citySearchEl.slot = 'trigger'
+
+  const menu = document.createElement('sl-menu') as any
+  dropdown.appendChild(menu)
+
+  function showResults(query: string) {
+    const results = searchCities(query)
+    menu.innerHTML = ''
+    if (!results.length) {
+      dropdown.hide()
+      return
+    }
+    for (const r of results) {
+      const item = document.createElement('sl-menu-item') as any
+      item.textContent = r.label
+      item.addEventListener('click', () => {
+        citySearchEl.value = r.label
+        dropdown.hide()
+        map.flyTo({ center: [r.lon, r.lat], zoom: 12, duration: 1500 })
+      })
+      menu.appendChild(item)
+    }
+    dropdown.show()
+  }
+
+  citySearchEl.addEventListener('sl-input', () => {
+    showResults(citySearchEl.value)
+  })
+
+  citySearchEl.addEventListener('sl-clear', () => {
+    dropdown.hide()
+  })
+}
+
 // ---- Keyboard navigation ----
 const PAN_DELTA = 100
 const ZOOM_DELTA = 1
 document.addEventListener('keydown', (e) => {
-  // futureproof: don't capture if user is typing in an input
-  const tag = (e.target as HTMLElement).tagName.toLowerCase()
-  if (tag === 'input' || tag === 'textarea') return
+  // ignore inputs
+  const el = e.target as HTMLElement
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'sl-input' || tag === 'sl-select' || tag === 'sl-textarea') return
+  if (el.closest('sl-input, sl-select, sl-textarea')) return
+  if ((e.composedPath() as HTMLElement[]).some(n => {
+    const t = (n as HTMLElement).tagName?.toLowerCase()
+    return t === 'sl-input' || t === 'sl-select' || t === 'sl-textarea'
+  })) return
 
   const dx = (() => {
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') return -PAN_DELTA
@@ -812,8 +878,8 @@ document.addEventListener('keydown', (e) => {
   })()
   const zoom = (() => {
     if (e.key === '+' || e.key === '=' || e.key === 'e' || e.key === 'E') return ZOOM_DELTA
-    if (e.key === '-' || e.key === '_' || e.key === 'q' || e.key === 'Q') return -ZOOM_DELTA
-    return 0
+      if (e.key === '-' || e.key === '_' || e.key === 'q' || e.key === 'Q') return -ZOOM_DELTA
+        return 0
   })()
 
   if (dx || dy) {
