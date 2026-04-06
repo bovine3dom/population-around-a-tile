@@ -57,12 +57,13 @@ function memoise<TArg, TResult>(fn: (arg: TArg) => TResult) {
   }
 }
 
-const getColour = (v: number): [number, number, number, number] => {
+const _getColour = (getQuantile: (v: number) => number) => (v: number): [number, number, number, number] => {
   const q = getQuantile ? getQuantile(v) : 0
   const c = d3.color(colourRamp(q))!
   const rgb = c.formatRgb().match(/[\d.]+/g)!.map(Number)
   return [rgb[0], rgb[1], rgb[2], 255]
 }
+const getColour = memoise(_getColour)
 
 function human(number: number): string {
   return parseFloat(number.toPrecision(2)).toLocaleString()
@@ -76,7 +77,10 @@ function chQuery(query: string): Promise<Response> {
   })
 }
 
-let RESOLUTION_MODIFIER = 0
+const _urlParams = new URLSearchParams(window.location.search)
+let RESOLUTION_MODIFIER = _urlParams.has('res') ? Number(_urlParams.get('res')) : 0
+let accumulateCities = _urlParams.has('acc') && _urlParams.get('acc') !== '0' && _urlParams.get('acc') !== 'false'
+let colourByWeights = _urlParams.has('w') && _urlParams.get('w') !== '0' && _urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
       select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
@@ -96,7 +100,7 @@ const attributionEl = document.getElementById('attribution')!
 let legendThrottleTimer: ReturnType<typeof setTimeout> | null = null
 
 let wantsUpdate = false
-function throttledUpdateLegend() {
+const _throttledUpdateLegend = (colourByWeights: boolean) => () => {
   if (legendThrottleTimer) {
     wantsUpdate = true
     return
@@ -108,6 +112,7 @@ function throttledUpdateLegend() {
     wantsUpdate = false
   }, 1000)
 }
+const throttledUpdateLegend = memoise(_throttledUpdateLegend)
 
 function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
   const sampleSize = Math.min(256, values.length)
@@ -161,16 +166,17 @@ function updateLegend(colourByWeights: boolean) {
   // Force re-render of hex layers
   h3Layer = new ArrowH3TileLayer({
     id: 'H3TileLayer',
+    // @ts-expect-error custom data function and layer type
     data: chquerygen(RESOLUTION_MODIFIER),
     pickable: true,
-    // @ts-expect-error custom data function
-    getFillColor: getColour,
+    getFillColor: getColour(getQuantile),
     colorDomain: [0, 1],
-    onDataChange: throttledUpdateLegend,
+    onDataChange: throttledUpdateLegend(colourByWeights),
   })
   mapOverlay.setProps({
     layers: [h3Layer],
   })
+
 }
 
 // ---- Click / median ----
@@ -195,21 +201,17 @@ const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db'
 
 let h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
+  // @ts-expect-error custom data function and layer type
   data: chquerygen(RESOLUTION_MODIFIER),
   pickable: true,
-  // @ts-expect-error custom data function
-  getFillColor: getColour,
+  getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
-  onDataChange: throttledUpdateLegend,
+  onDataChange: throttledUpdateLegend(colourByWeights),
 })
 
 // Capture shift state at mousedown time (before keyup can interfere)
 let clickShiftState = false
-let accumulateCities = false
 document.addEventListener('mousedown', (e) => { clickShiftState = e.shiftKey })
-document.getElementById('accumulate_cities')!.addEventListener('sl-change', (e: Event) => {
-  accumulateCities = (e.target as HTMLInputElement).checked
-})
 
 const mapOverlay = new MapboxOverlay({
   interleaved: false,
@@ -653,33 +655,137 @@ let cumPopChart: typeof Chart | undefined
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())
 
-document.getElementById('desired_radius')!.addEventListener('sl-change', (e: Event) => {
-  if (lastInfo == undefined) {
-    return
+// ---- Settings registry ----
+interface SettingSpec<T> {
+  param: string
+  default: T
+  parse: (raw: string | null) => T
+  serialize: (v: T) => string
+  onChange: (v: T, el: HTMLElement) => void
+}
+
+const settings: SettingSpec<any>[] = []
+
+function registerSetting<T>(spec: SettingSpec<T>) {
+  settings.push(spec)
+}
+
+function initSettings() {
+  const params = new URLSearchParams(window.location.search)
+
+  for (const spec of settings) {
+    const el = document.querySelector(`[data-param="${spec.param}"]`) as HTMLElement | null
+    if (!el) continue
+
+    const value = spec.parse(params.get(spec.param))
+    applySettingToElement(el, value)
+
+    el.addEventListener('sl-change', (e: Event) => {
+      const newValue = readSettingFromElement(el, spec)
+      spec.onChange(newValue, el)
+      params.set(spec.param, spec.serialize(newValue))
+      history.replaceState(null, '', `?${params.toString()}${window.location.hash}`)
+    })
   }
-  const radius = Number((e.target as HTMLInputElement).value)
-  makeHighlight(lastInfo, radius)
+}
+
+async function waitForShoelace() {
+  const elements = document.querySelectorAll('[data-param]')
+  await Promise.all(
+    Array.from(elements).map(el =>
+      el.tagName.includes('-') && !customElements.get(el.tagName.toLowerCase())
+        ? customElements.whenDefined(el.tagName.toLowerCase())
+        : Promise.resolve()
+    )
+  )
+}
+
+waitForShoelace().then(() => initSettings())
+
+function applySettingToElement(el: HTMLElement, value: any) {
+  if (el.tagName.toLowerCase().includes('checkbox')) {
+    ;(el as any).checked = value
+  } else if (el.tagName.toLowerCase().includes('range') || el.tagName.toLowerCase().includes('input')) {
+    ;(el as any).value = value
+  }
+}
+
+function readSettingFromElement(el: HTMLElement, spec: SettingSpec<any>): any {
+  if (el.tagName.toLowerCase().includes('checkbox')) {
+    return (el as any).checked
+  }
+  return (el as any).value
+}
+
+// ---- Register settings ----
+registerSetting<number>({
+  param: 'res',
+  default: 0,
+  parse: (raw) => raw !== null ? Number(raw) : 0,
+  serialize: (v) => String(v),
+  onChange: (value) => {
+    RESOLUTION_MODIFIER = value
+    h3Layer = new ArrowH3TileLayer({
+      id: 'H3TileLayer',
+      // @ts-expect-error custom data function and layer type
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile!),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights),
+    })
+    mapOverlay.setProps({
+      layers: [h3Layer],
+    })
+  },
 })
 
-document.getElementById('resolution_modifier')!.addEventListener('sl-change', (e: Event) => {
-  RESOLUTION_MODIFIER = Number((e.target as HTMLInputElement).value)
-  h3Layer = new ArrowH3TileLayer({
-    id: 'H3TileLayer',
-    data: chquerygen(RESOLUTION_MODIFIER),
-    pickable: true,
-    // @ts-expect-error custom data function
-    getFillColor: getColour,
-    colorDomain: [0, 1],
-    onDataChange: throttledUpdateLegend,
-  })
-  mapOverlay.setProps({
-    layers: [h3Layer],
-  })
+registerSetting<number>({
+  param: 'rad',
+  default: 15,
+  parse: (raw) => raw !== null ? Number(raw) : 15,
+  serialize: (v) => String(v),
+  onChange: (value) => {
+    if (lastInfo == undefined) return
+    makeHighlight(lastInfo, value)
+  },
+})
+
+registerSetting<boolean>({
+  param: 'acc',
+  default: false,
+  parse: (raw) => raw !== null && raw !== '0' && raw !== 'false',
+  serialize: (v) => v ? '1' : '0',
+  onChange: (value) => {
+    accumulateCities = value
+  },
+})
+
+registerSetting<boolean>({
+  param: 'w',
+  default: false,
+  parse: (raw) => raw !== null && raw !== '0' && raw !== 'false',
+  serialize: (v) => v ? '1' : '0',
+  onChange: (value) => {
+    colourByWeights = value
+    updateLegend(colourByWeights)
+    h3Layer = new ArrowH3TileLayer({
+      id: 'H3TileLayer',
+      // @ts-expect-error custom data function and layer type
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile!),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights),
+    })
+    mapOverlay.setProps({
+      layers: [h3Layer],
+    })
+  },
 })
 
 // ---- Attribution ----
 const params = new URLSearchParams(window.location.search)
-let colourByWeights = params.get('w') != undefined
 attributionEl.innerText =
   '© ' +
   [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors']

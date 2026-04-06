@@ -68,7 +68,6 @@
         <div id="widgets">
             <!-- https://shoelace.style/getting-started/usage -->
             <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
-                <sl-range id="desired_radius" label="Radius (number of hexagons)" min=1 max=50 step=1 value=15></sl-range>
                 <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
                 <div id="results">
                     <p id="results_text">click somewhere on the map to get the population and population density within the selected radius</p>
@@ -123,9 +122,13 @@ why did you do this?
         </div>
         <sl-button id="settings-button" size="small" onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
         <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
-            <sl-range id="resolution_modifier" label="Resolution" help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
+            <sl-range id="resolution_modifier" data-param="res" label="Resolution" help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
             <br/>
-            <sl-checkbox id="accumulate_cities" help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities on click</sl-checkbox>
+            <sl-range id="desired_radius" data-param="rad" label="Radius (number of hexagons)" min="1" max="50" step="1" value="15"></sl-range>
+            <br/>
+            <sl-checkbox id="accumulate_cities" data-param="acc" help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities on click</sl-checkbox>
+            <br/>
+            <sl-checkbox id="colour_by_weights" data-param="w" help-text="Make it easier to see differences in heavily populated areas">Weight legend quantiles by population</sl-checkbox>
         </sl-drawer>
         <script>
             const IS_MOBILE = navigator.userAgent.includes("Mobi")

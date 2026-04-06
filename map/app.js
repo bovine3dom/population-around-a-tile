@@ -120608,12 +120608,22 @@ var map4 = new import_maplibre_gl.default.Map({
 var colourRamp = sequential(Spectral_default).domain([0, 1]);
 var getQuantile;
 var getValueFromQuantile;
-var getColour = (v2) => {
-  const q2 = getQuantile ? getQuantile(v2) : 0;
+function memoise(fn) {
+  const cache2 = new Map;
+  return (arg) => {
+    if (!cache2.has(arg)) {
+      cache2.set(arg, fn(arg));
+    }
+    return cache2.get(arg);
+  };
+}
+var _getColour = (getQuantile2) => (v2) => {
+  const q2 = getQuantile2 ? getQuantile2(v2) : 0;
   const c2 = color(colourRamp(q2));
   const rgb2 = c2.formatRgb().match(/[\d.]+/g).map(Number);
   return [rgb2[0], rgb2[1], rgb2[2], 255];
 };
+var getColour = memoise(_getColour);
 function human(number4) {
   return parseFloat(number4.toPrecision(2)).toLocaleString();
 }
@@ -120624,8 +120634,11 @@ function chQuery(query2) {
     })
   });
 }
-var RESOLUTION_MODIFIER = 0;
-var chquerygen = (RESOLUTION_MODIFIER2) => ({ h3Index, resolution }) => {
+var _urlParams = new URLSearchParams(window.location.search);
+var RESOLUTION_MODIFIER = _urlParams.has("res") ? Number(_urlParams.get("res")) : 0;
+var accumulateCities = _urlParams.has("acc") && _urlParams.get("acc") !== "0" && _urlParams.get("acc") !== "false";
+var colourByWeights = _urlParams.has("w") && _urlParams.get("w") !== "0" && _urlParams.get("w") !== "false";
+var _chquerygen = (RESOLUTION_MODIFIER2) => ({ h3Index, resolution }) => {
   const query2 = `
       select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER2}, h3GetResolution(h3))) index, sum(population)/(h3CellAreaM2(index)/(1000*1000)) value, sum(population) weight
       from public_kontur_population_20231101
@@ -120634,31 +120647,24 @@ var chquerygen = (RESOLUTION_MODIFIER2) => ({ h3Index, resolution }) => {
   `;
   return chQuery(query2);
 };
-var chquerygen_baked = new Map([
-  [-3, chquerygen(-3)],
-  [-2, chquerygen(-2)],
-  [-1, chquerygen(-1)],
-  [0, chquerygen(0)],
-  [1, chquerygen(1)],
-  [2, chquerygen(2)],
-  [3, chquerygen(3)]
-]);
+var chquerygen = memoise(_chquerygen);
 var legendElement = null;
 var attributionEl = document.getElementById("attribution");
 var legendThrottleTimer = null;
 var wantsUpdate = false;
-function throttledUpdateLegend() {
+var _throttledUpdateLegend = (colourByWeights2) => () => {
   if (legendThrottleTimer) {
     wantsUpdate = true;
     return;
   }
-  updateLegend();
+  updateLegend(colourByWeights2);
   legendThrottleTimer = setTimeout(() => {
     legendThrottleTimer = null;
-    wantsUpdate && updateLegend();
+    wantsUpdate && updateLegend(colourByWeights2);
     wantsUpdate = false;
   }, 1000);
-}
+};
+var throttledUpdateLegend = memoise(_throttledUpdateLegend);
 function buildEcdf(values2, weights) {
   const sampleSize = Math.min(256, values2.length);
   const indices = Array.from({ length: sampleSize }, () => Math.floor(Math.random() * values2.length));
@@ -120683,11 +120689,11 @@ function buildEcdf(values2, weights) {
   };
   return { getQuantile: getQuantile2, getValueFromQuantile: getValueFromQuantile2 };
 }
-function updateLegend() {
+function updateLegend(colourByWeights2) {
   const { values: values2, weights } = h3Layer.getSampleValuesAndWeights(1e5);
   if (values2.length === 0)
     return;
-  const effectiveWeights = colourByWeights && weights && weights.length === values2.length ? weights : new Array(values2.length).fill(1);
+  const effectiveWeights = colourByWeights2 && weights && weights.length === values2.length ? weights : new Array(values2.length).fill(1);
   const ecdf = buildEcdf(values2, effectiveWeights);
   getQuantile = ecdf.getQuantile;
   getValueFromQuantile = ecdf.getValueFromQuantile;
@@ -120703,11 +120709,11 @@ function updateLegend() {
   attributionEl.insertBefore(legendElement, attributionEl.firstChild);
   h3Layer = new ArrowH3TileLayer({
     id: "H3TileLayer",
-    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+    data: chquerygen(RESOLUTION_MODIFIER),
     pickable: true,
-    getFillColor: getColour,
+    getFillColor: getColour(getQuantile),
     colorDomain: [0, 1],
-    onDataChange: throttledUpdateLegend
+    onDataChange: throttledUpdateLegend(colourByWeights2)
   });
   mapOverlay.setProps({
     layers: [h3Layer]
@@ -120721,19 +120727,15 @@ var chartLocations = [];
 var COLORS = ["#ff69b4", "#ffa500", "#41c6ff", "#7cfc00", "#ff4500", "#9370db", "#00ced1", "#ffd700"];
 var h3Layer = new ArrowH3TileLayer({
   id: "H3TileLayer",
-  data: chquerygen_baked.get(RESOLUTION_MODIFIER),
+  data: chquerygen(RESOLUTION_MODIFIER),
   pickable: true,
-  getFillColor: getColour,
+  getFillColor: getColour(getQuantile),
   colorDomain: [0, 1],
-  onDataChange: throttledUpdateLegend
+  onDataChange: throttledUpdateLegend(colourByWeights)
 });
 var clickShiftState = false;
-var accumulateCities = false;
 document.addEventListener("mousedown", (e3) => {
   clickShiftState = e3.shiftKey;
-});
-document.getElementById("accumulate_cities").addEventListener("sl-change", (e3) => {
-  accumulateCities = e3.target.checked;
 });
 var mapOverlay = new MapboxOverlay({
   interleaved: false,
@@ -121097,29 +121099,106 @@ var ecdfChart;
 var cumPopChart;
 map4.addControl(mapOverlay);
 map4.addControl(new import_maplibre_gl.default.NavigationControl);
-document.getElementById("desired_radius").addEventListener("sl-change", (e3) => {
-  if (lastInfo == undefined) {
-    return;
+var settings = [];
+function registerSetting(spec) {
+  settings.push(spec);
+}
+function initSettings() {
+  const params = new URLSearchParams(window.location.search);
+  for (const spec of settings) {
+    const el = document.querySelector(`[data-param="${spec.param}"]`);
+    if (!el)
+      continue;
+    const value = spec.parse(params.get(spec.param));
+    applySettingToElement(el, value);
+    el.addEventListener("sl-change", (e3) => {
+      const newValue = readSettingFromElement(el, spec);
+      spec.onChange(newValue, el);
+      params.set(spec.param, spec.serialize(newValue));
+      history.replaceState(null, "", `?${params.toString()}${window.location.hash}`);
+    });
   }
-  const radius = Number(e3.target.value);
-  makeHighlight(lastInfo, radius);
+}
+async function waitForShoelace() {
+  const elements = document.querySelectorAll("[data-param]");
+  await Promise.all(Array.from(elements).map((el) => el.tagName.includes("-") && !customElements.get(el.tagName.toLowerCase()) ? customElements.whenDefined(el.tagName.toLowerCase()) : Promise.resolve()));
+}
+waitForShoelace().then(() => initSettings());
+function applySettingToElement(el, value) {
+  if (el.tagName.toLowerCase().includes("checkbox")) {
+    el.checked = value;
+  } else if (el.tagName.toLowerCase().includes("range") || el.tagName.toLowerCase().includes("input")) {
+    el.value = value;
+  }
+}
+function readSettingFromElement(el, spec) {
+  if (el.tagName.toLowerCase().includes("checkbox")) {
+    return el.checked;
+  }
+  return el.value;
+}
+registerSetting({
+  param: "res",
+  default: 0,
+  parse: (raw) => raw !== null ? Number(raw) : 0,
+  serialize: (v2) => String(v2),
+  onChange: (value) => {
+    RESOLUTION_MODIFIER = value;
+    h3Layer = new ArrowH3TileLayer({
+      id: "H3TileLayer",
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights)
+    });
+    mapOverlay.setProps({
+      layers: [h3Layer]
+    });
+  }
 });
-document.getElementById("resolution_modifier").addEventListener("sl-change", (e3) => {
-  RESOLUTION_MODIFIER = Number(e3.target.value);
-  h3Layer = new ArrowH3TileLayer({
-    id: "H3TileLayer",
-    data: chquerygen_baked.get(RESOLUTION_MODIFIER),
-    pickable: true,
-    getFillColor: getColour,
-    colorDomain: [0, 1],
-    onDataChange: throttledUpdateLegend
-  });
-  mapOverlay.setProps({
-    layers: [h3Layer]
-  });
+registerSetting({
+  param: "rad",
+  default: 15,
+  parse: (raw) => raw !== null ? Number(raw) : 15,
+  serialize: (v2) => String(v2),
+  onChange: (value) => {
+    if (lastInfo == undefined)
+      return;
+    makeHighlight(lastInfo, value);
+  }
+});
+registerSetting({
+  param: "acc",
+  default: false,
+  parse: (raw) => raw !== null && raw !== "0" && raw !== "false",
+  serialize: (v2) => v2 ? "1" : "0",
+  onChange: (value) => {
+    accumulateCities = value;
+  }
+});
+registerSetting({
+  param: "w",
+  default: false,
+  parse: (raw) => raw !== null && raw !== "0" && raw !== "false",
+  serialize: (v2) => v2 ? "1" : "0",
+  onChange: (value) => {
+    colourByWeights = value;
+    updateLegend(colourByWeights);
+    h3Layer = new ArrowH3TileLayer({
+      id: "H3TileLayer",
+      data: chquerygen(RESOLUTION_MODIFIER),
+      pickable: true,
+      getFillColor: getColour(getQuantile),
+      colorDomain: [0, 1],
+      onDataChange: throttledUpdateLegend(colourByWeights)
+    });
+    mapOverlay.setProps({
+      layers: [h3Layer]
+    });
+  }
 });
 var params = new URLSearchParams(window.location.search);
-var colourByWeights = params.get("w") != null;
 attributionEl.innerText = "© " + [params.get("c"), "bovine3dom", "Mapterhorn", "Versatiles", `GEBCO
 `, "Natural Earth", "Kontur", "GHSL", `OpenFreeMap
 `, "OpenStreetMap contributors"].filter((x2) => x2 !== null).join(" © ");
@@ -121135,5 +121214,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=F220087EFB49A74764756E2164756E21
+//# debugId=19347FBE51AEB41A64756E2164756E21
 //# sourceMappingURL=app.js.map
