@@ -69,6 +69,7 @@
             <!-- https://shoelace.style/getting-started/usage -->
             <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
                 <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
+                <sl-range id="desired_radius" data-param="rad" label="Radius (number of hexagons)" min="1" max="50" step="1" value="15"></sl-range>
                 <div id="results">
                     <p id="results_text">click somewhere on the map to get the population and population density within the selected radius</p>
                     <div id="ring_chart" style="width: 100%; min-height: 300px;"></div>
@@ -125,8 +126,6 @@ why did you do this?
             <sl-input id="city_search" type="search" placeholder="Fly to city" help-text="Jump to a biggish city by name" clearable></sl-input>
             <br/>
             <sl-range id="resolution_modifier" data-param="res" label="Resolution" help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
-            <br/>
-            <sl-range id="desired_radius" data-param="rad" label="Radius (number of hexagons)" min="1" max="50" step="1" value="15"></sl-range>
             <br/>
             <sl-checkbox id="accumulate_cities" data-param="acc" help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities on click</sl-checkbox>
             <br/>

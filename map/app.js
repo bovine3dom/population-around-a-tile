@@ -120711,7 +120711,7 @@ function updateLegend(colourByWeights2) {
   if (legendElement) {
     legendElement.remove();
   }
-  legendElement = legend({ color: colourRamp, title: "Population per km^2", tickFormat: tickFormat2 });
+  legendElement = legend({ color: colourRamp, title: "Population per km²", tickFormat: tickFormat2 });
   attributionEl.insertBefore(legendElement, attributionEl.firstChild);
   h3Layer = new ArrowH3TileLayer({
     id: "H3TileLayer",
@@ -121316,5 +121316,5 @@ var setFavicon = () => {
 setFavicon();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setFavicon);
 
-//# debugId=55A284DD7707071464756E2164756E21
+//# debugId=1F6D2CF5F2EE05F464756E2164756E21
 //# sourceMappingURL=app.js.map

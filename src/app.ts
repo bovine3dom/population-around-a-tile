@@ -167,7 +167,7 @@ function updateLegend(colourByWeights: boolean) {
   if (legendElement) {
     legendElement.remove()
   }
-  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km^2', tickFormat })
+  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km²', tickFormat })
   attributionEl.insertBefore(legendElement, attributionEl.firstChild)
 
   // Force re-render of hex layers
