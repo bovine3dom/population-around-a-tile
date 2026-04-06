@@ -8,8 +8,7 @@ import * as observablehq from './vendor/observablehq'
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
 import { ArrowH3TileLayer } from './ArrowH3TileLayer'
-// @ts-expect-error no types
-import { Chart } from 'frappe-charts/dist/frappe-charts.esm'
+import { D3LineChart } from './d3-line-chart'
 import { findClosestCity } from './tiny-cities'
 import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
@@ -336,7 +335,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
         q25_dist: (d: any) => aq.op.abs(d.quantile - 0.25),
       })
       .orderby('median_dist')
-    ;(window as any).dt = dt
+      ; (window as any).dt = dt
 
     lastDensity = (dt.get('value', 0) as number)
     const last75Density = (dt.orderby('q75_dist').get('value', 0) as number)
@@ -347,7 +346,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
 
     const res = h3.getResolution(dt.get('index', 0) as string)
     const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
-    const diamKm = h3.getHexagonEdgeLengthAvg(res, 'km')*2
+    const diamKm = h3.getHexagonEdgeLengthAvg(res, 'km') * 2
 
     // Log density quantiles per hollow ring
     const ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[] = []
@@ -430,8 +429,8 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
           }
         }
       }
-      runningPop += ringPop
-      cumPopData.push({ distance: d*diamKm, cumPop: runningPop })
+      runningPop += ringPop * areaKm2
+      cumPopData.push({ distance: d * diamKm, cumPop: runningPop })
     }
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
     const centerLon = h3.cellToLatLng(clickedIndex)[1]
@@ -456,9 +455,9 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
-            <p>Total population: <b>${human(lastPop*areaKm2)}</b>                                                                          </p>
+            <p>Total population: <b>${human(lastPop * areaKm2)}</b>                                                                          </p>
             `
-    ;(document.getElementById('settings') as any).show()
+      ; (document.getElementById('settings') as any).show()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(dt)] })
   }
 }
@@ -470,7 +469,6 @@ function renderChart() {
   const first = chartLocations[0]
   const maxDist = first.ringStats.length
 
-  const mirroredLabels: string[] = []
   const datasets: any[] = []
 
   if (chartLocations.length === 1) {
@@ -479,77 +477,74 @@ function renderChart() {
     const medianVals: number[] = []
     const q25Vals: number[] = []
     const q75Vals: number[] = []
+    const xVals: number[] = []
 
     for (let d = maxDist - 1; d >= 1; d--) {
       const stat = loc.ringStats[d]
-      mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
+      xVals.push(stat ? -stat.distance : 0)
       medianVals.push(stat ? stat.median : 0)
       q25Vals.push(stat ? stat.q25 : 0)
       q75Vals.push(stat ? stat.q75 : 0)
     }
     for (let d = 0; d < maxDist; d++) {
       const stat = loc.ringStats[d]
-      mirroredLabels.push(`${stat?.distance.toFixed(1)}`)
+      xVals.push(stat ? stat.distance : 0)
       medianVals.push(stat ? stat.median : 0)
       q25Vals.push(stat ? stat.q25 : 0)
       q75Vals.push(stat ? stat.q75 : 0)
     }
 
     datasets.push(
-      { name: 'Median', values: medianVals },
-      { name: '25th percentile', values: q25Vals },
-      { name: '75th percentile', values: q75Vals },
+      { name: 'Median', values: medianVals, xValues: xVals },
+      { name: '25th percentile', values: q25Vals, xValues: xVals },
+      { name: '75th percentile', values: q75Vals, xValues: xVals },
     )
   } else {
-    // todo: reject non-uniform distances
-    let l = 1;
     for (const loc of chartLocations) {
       const vals: number[] = []
+      const xVals: number[] = []
       for (let d = maxDist - 1; d >= 1; d--) {
         const stat = loc.ringStats[d]
-        l == 1 && mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
+        xVals.push(stat ? -stat.distance : 0)
         vals.push(stat ? stat.median : 0)
       }
       for (let d = 0; d < maxDist; d++) {
         const stat = loc.ringStats[d]
-        l == 1 && mirroredLabels.push(`-${stat?.distance.toFixed(1)}`)
+        xVals.push(stat ? stat.distance : 0)
         vals.push(stat ? stat.median : 0)
       }
-      datasets.push({ name: loc.city, values: vals })
-      l++
+      datasets.push({ name: loc.city, values: vals, xValues: xVals })
     }
   }
 
   const chartEl = document.getElementById('ring_chart')!
   const data = {
-    labels: mirroredLabels,
     datasets,
   }
   const config = {
-      type: 'line',
-      height: 300,
-      title: "Weighted population density versus km from centre",
-      colors: chartLocations.length === 1
-        ? ['#ff69b4', '#ffa500', '#41c6ff']
-        : chartLocations.map(l => l.color),
-      axisOptions: {
-        xIsSeries: true,
-        xAxisMode: 'tick',
-        yAxisMode: 'span',
-      },
-      lineOptions: {
-        hideDots: 1,
-      },
-      animate: false,
+    type: 'line',
+    height: 300,
+    title: "Weighted population density versus km from centre",
+    colors: chartLocations.length === 1
+      ? ['#ff69b4', '#ffa500', '#41c6ff']
+      : chartLocations.map(l => l.color),
+    axisOptions: {
+      xIsSeries: true,
+      xAxisMode: 'tick',
+      yAxisMode: 'span',
+    },
+    lineOptions: {
+      hideDots: 1,
+    },
+    animate: false,
   }
-  if (chart == undefined || chart?.state?.datasets?.length !== datasets.length) {
-    chartEl.replaceChildren()
-    chart = new Chart(chartEl, {
+  if (chart == undefined) {
+    chart = new D3LineChart(chartEl, {
       data,
       ...config,
     })
   } else {
-    chart.update({labels: mirroredLabels, datasets})
+    chart.update(data, config)
   }
 
   renderEcdfChart()
@@ -586,16 +581,14 @@ function renderEcdfChart() {
       values.push(v0 + t * (v1 - v0))
     }
 
-    datasets.push({ name: loc.city, values })
+    datasets.push({ name: loc.city, values, xValues: percentiles })
     colors.push(loc.color)
   }
 
-  const labels = percentiles.map(p => `${p}%`)
-  const chartTitle = chartLocations.length === 1 ? "Population density versus weighted percentile" : chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — population density versus weighted percentile'
+  const chartTitle = "Population density versus weighted percentile"
 
   const chartEl = document.getElementById('ecdf_chart')!
   const chartData = {
-    labels,
     datasets,
   }
   const config = {
@@ -613,14 +606,13 @@ function renderEcdfChart() {
     },
     animate: false,
   }
-  if (ecdfChart == undefined || ecdfChart?.state?.datasets?.length !== datasets.length) {
-    chartEl.replaceChildren()
-    ecdfChart = new Chart(chartEl, {
+  if (ecdfChart == undefined) {
+    ecdfChart = new D3LineChart(chartEl, {
       data: chartData,
       ...config,
     })
   } else {
-    ecdfChart.update({ labels: chartData.labels, datasets })
+    ecdfChart.update(chartData, config)
   }
 }
 
@@ -631,21 +623,20 @@ function renderCumPopChart() {
   const colors: string[] = []
 
   const first = chartLocations[0]
-  const labels = first.cumPopData.map((d: any) => `${d.distance.toFixed(1)}`)
 
   for (const loc of chartLocations) {
     const values = loc.cumPopData.map((d: any) => d.cumPop)
+    const xValues = loc.cumPopData.map((d: any) => d.distance)
 
-    datasets.push({ name: loc.city, values })
+    datasets.push({ name: loc.city, values, xValues })
     colors.push(loc.color)
   }
 
   const chartEl = document.getElementById('cumpop_chart')!
   const chartData = {
-    labels,
     datasets,
   }
-  const chartTitle = chartLocations.length === 1 ? "Cumulative population versus km from centre" : chartLocations.map(loc => findClosestCity(loc.lat, loc.lon)).join(', ') + ' — cumulative population versus km from centre'
+  const chartTitle = "Cumulative population versus km from centre"
   const config = {
     type: 'line',
     height: 300,
@@ -661,20 +652,19 @@ function renderCumPopChart() {
     },
     animate: false,
   }
-  if (cumPopChart == undefined || cumPopChart?.state?.datasets?.length !== datasets.length) {
-    chartEl.replaceChildren()
-    cumPopChart = new Chart(chartEl, {
+  if (cumPopChart == undefined) {
+    cumPopChart = new D3LineChart(chartEl, {
       data: chartData,
       ...config,
     })
   } else {
-    cumPopChart.update({ labels: chartData.labels, datasets })
+    cumPopChart.update(chartData, config)
   }
 }
 
-let chart: typeof Chart | undefined
-let ecdfChart: typeof Chart | undefined
-let cumPopChart: typeof Chart | undefined
+let chart: D3LineChart | undefined
+let ecdfChart: D3LineChart | undefined
+let cumPopChart: D3LineChart | undefined
 
 map.addControl(mapOverlay)
 map.addControl(new maplibregl.NavigationControl())
@@ -728,9 +718,9 @@ waitForShoelace().then(() => initSettings())
 
 function applySettingToElement(el: HTMLElement, value: any) {
   if (el.tagName.toLowerCase().includes('checkbox')) {
-    ;(el as any).checked = value
+    ; (el as any).checked = value
   } else if (el.tagName.toLowerCase().includes('range') || el.tagName.toLowerCase().includes('input')) {
-    ;(el as any).value = value
+    ; (el as any).value = value
   }
 }
 
@@ -963,8 +953,8 @@ document.addEventListener('keydown', (e) => {
   })()
   const zoom = (() => {
     if (e.key === '+' || e.key === '=' || e.key === 'e' || e.key === 'E') return ZOOM_DELTA
-      if (e.key === '-' || e.key === '_' || e.key === 'q' || e.key === 'Q') return -ZOOM_DELTA
-        return 0
+    if (e.key === '-' || e.key === '_' || e.key === 'q' || e.key === 'Q') return -ZOOM_DELTA
+    return 0
   })()
 
   if (dx || dy) {

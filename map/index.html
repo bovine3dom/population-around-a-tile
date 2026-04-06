@@ -1,97 +1,118 @@
 <!doctype html>
 <html>
-    <head>
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/themes/light.css" />
-        <link rel="icon" href="cow.svg"/>
-        <link rel="icon" href="cow-light.svg" type="image/x-icon" media="(prefers-color-scheme: dark)">
-        <link rel="icon" href="cow.svg" type="image/x-icon" media="(prefers-color-scheme: light)">
-        <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/shoelace-autoloader.js"></script>
-        <meta charset='UTF-8' />
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Population around a tile</title>
-        <style>
-:root {
-    --sl-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-    font-family: var(--sl-font-sans);
-}
-#map {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-}
-br {
-    display: block;
-    margin-top: 0.5em;
-    margin-bottom: 0.5em;
-}
-#deckgl-overlay {
-    mix-blend-mode: multiply;
-}
-#attribution {
-    position: absolute;
-    z-index: 1; /* Ensure it appears above the map */
-    padding: 0em 2em 0.5em 1.5em; /* top right bottom left */
-    background-color: rgba(255, 255, 255, 0.9);
-    color: rgba(0, 0, 0, 0.6);
-    bottom: 0;
-    right: 0;
-    font-family: "Helvetica Neue", "sans-serif";
-    text-align: right;
-    font-size: 8pt;
-    border-radius: 0px;
-}
-#attribution > br {
-    margin: 0;
-}
-@media (max-width: 767px) {
-    sl-drawer#settings::part(panel) {
-        height: 40vh;
-        width: 100vw;
-    }
-}
-@media (min-width: 768px) {
-    sl-drawer#settings::part(panel) {
-        height: 100vh;
-        width: 40vw;
-    }
-}
-:not(:defined) {
-      visibility: hidden;
-}
-#settings-button {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-}
-        </style>
-<!-- #legend { position: absolute; z-index: 1; background-color: rgba(255, 255, 255, 0.6); color: rgba(0, 0, 0, 0.6); top: 0; right: 0; font-family: "Helvetica Neue", "sans-serif"; font-size: 8pt; border-radius: 0px; } #legend text { stroke: white; stroke-width: 2px; paint-order: stroke; } -->
-    </head>
-    <body>
-        <div id="map">
-            <div id="legend"></div>
-            <div id="attribution"></div>
-        </div>
-        <div id="widgets">
-            <!-- https://shoelace.style/getting-started/usage -->
-            <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
-                <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
-                <div style="display: flex; flex-direction: row; align-items: center; gap: 1em;">
-                    <sl-input id="city_search" type="search" placeholder="Fly to city" help-text="Jump to a biggish city by name" clearable></sl-input>
-                    <br/>
-                    <sl-checkbox id="accumulate_cities" data-param="acc" help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities on click</sl-checkbox>
-                </div>
-                <br/>
-                <sl-range id="desired_radius" data-param="rad" label="Radius (number of hexagons)" min="1" max="50" step="1" value="15"></sl-range>
-                <div id="results">
-                    <p id="results_text">click somewhere on the map to get the population and population density within the selected radius</p>
-                    <div id="ring_chart" style="width: 100%; min-height: 300px;"></div>
-                    <div id="ecdf_chart" style="width: 100%; min-height: 300px;"></div>
-                    <div id="cumpop_chart" style="width: 100%; min-height: 300px;"></div>
-                    <sl-details summary="faq/info/why">
-                        <div id="waffle">
-                            <pre style="word-wrap: break-word; white-space: pre-wrap;">
+
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/themes/light.css" />
+    <link rel="icon" href="cow.svg" />
+    <link rel="icon" href="cow-light.svg" type="image/x-icon" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="cow.svg" type="image/x-icon" media="(prefers-color-scheme: light)">
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.17.1/cdn/shoelace-autoloader.js"></script>
+    <meta charset='UTF-8' />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Population around a tile</title>
+    <style>
+        :root {
+            --sl-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            font-family: var(--sl-font-sans);
+        }
+
+        #map {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        br {
+            display: block;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }
+
+        #deckgl-overlay {
+            mix-blend-mode: multiply;
+        }
+
+        #attribution {
+            position: absolute;
+            z-index: 1;
+            /* Ensure it appears above the map */
+            padding: 0em 2em 0.5em 1.5em;
+            /* top right bottom left */
+            background-color: rgba(255, 255, 255, 0.9);
+            color: rgba(0, 0, 0, 0.6);
+            bottom: 0;
+            right: 0;
+            font-family: "Helvetica Neue", "sans-serif";
+            text-align: right;
+            font-size: 8pt;
+            border-radius: 0px;
+        }
+
+        #attribution>br {
+            margin: 0;
+        }
+
+        @media (max-width: 767px) {
+            sl-drawer#settings::part(panel) {
+                height: 40vh;
+                width: 100vw;
+            }
+        }
+
+        @media (min-width: 768px) {
+            sl-drawer#settings::part(panel) {
+                height: 100vh;
+                width: 40vw;
+            }
+        }
+
+        :not(:defined) {
+            visibility: hidden;
+        }
+
+        #settings-button {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+        }
+    </style>
+    <!-- #legend { position: absolute; z-index: 1; background-color: rgba(255, 255, 255, 0.6); color: rgba(0, 0, 0, 0.6); top: 0; right: 0; font-family: "Helvetica Neue", "sans-serif"; font-size: 8pt; border-radius: 0px; } #legend text { stroke: white; stroke-width: 2px; paint-order: stroke; } -->
+</head>
+
+<body>
+    <div id="map">
+        <div id="legend"></div>
+        <div id="attribution"></div>
+    </div>
+    <div id="widgets">
+        <!-- https://shoelace.style/getting-started/usage -->
+        <sl-drawer contained="true" id="settings" label="Population around a tile" placement="start">
+            <!-- <p><small><a href="./?trains">click here for map with railways</a></small></p> -->
+            <div style="display: flex; flex-direction: row; align-items: center; gap: 1em;">
+                <sl-input id="city_search" type="search" placeholder="Fly to city"
+                    help-text="Jump to a biggish city by name" clearable></sl-input>
+                <br />
+                <sl-checkbox id="accumulate_cities" data-param="acc"
+                    help-text="Compare cities by clicking them one by one, or shift click on desktop">Accumulate cities
+                    on click</sl-checkbox>
+            </div>
+            <br />
+            <sl-range id="desired_radius" data-param="rad" label="Radius (number of hexagons)" min="1" max="50" step="1"
+                value="15"></sl-range>
+            <div id="results">
+                <p id="results_text">click somewhere on the map to get the population and population density within the
+                    selected radius</p>
+                <div id="ring_chart" style="width: 100%; min-height: 300px;"></div>
+                <br />
+                <div id="ecdf_chart" style="width: 100%; min-height: 300px;"></div>
+                <br />
+                <div id="cumpop_chart" style="width: 100%; min-height: 300px;"></div>
+                <sl-details summary="faq/info/why">
+                    <div id="waffle">
+                        <pre style="word-wrap: break-word; white-space: pre-wrap;">
 what does "density weighted by population" mean?
     it is the density that the median person lives at, which is the density you should probably
     care about if you care about how people live and behave. people care about people. so should you.
@@ -129,33 +150,38 @@ why did you do this?
     3) https://www.tomforth.co.uk/circlepopulations/ reminded me that toys are better than graphs for changing minds
 
                             </pre>
-                        </div>
-                    </sl-details>
-                </div>
-            </sl-drawer>
-            <sl-button size="small" onclick="document.getElementById('settings').show()">Graphs/faq</sl-button>
-        </div>
-        <sl-button id="settings-button" size="small" onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
-        <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
-            <sl-range id="resolution_modifier" data-param="res" label="Resolution" help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
-            <br/>
-            <sl-checkbox id="colour_by_weights" data-param="w" help-text="Make it easier to see differences in heavily populated areas">Weight legend quantiles by population</sl-checkbox>
-            <br/>
-            <sl-select id="colour_scheme" data-param="cs" label="Colour scheme" value="interpolateSpectral" hoist>
-            </sl-select>
-            <br/>
-            <sl-checkbox id="colour_invert" data-param="ci">Invert colour scheme</sl-checkbox>
+                    </div>
+                </sl-details>
+            </div>
         </sl-drawer>
-        <script>
-            const IS_MOBILE = navigator.userAgent.includes("Mobi")
-            function updateDrawerPlacement() {
-                const drawer = document.getElementById('settings');
-                if (IS_MOBILE) {
-                    drawer.placement = 'top';
-                }
+        <sl-button size="small" onclick="document.getElementById('settings').show()">Graphs/faq</sl-button>
+    </div>
+    <sl-button id="settings-button" size="small"
+        onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
+    <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
+        <sl-range id="resolution_modifier" data-param="res" label="Resolution"
+            help-text="(high values can be computationally intensive)" min="-3" max="3" step="1" value="0"></sl-range>
+        <br />
+        <sl-checkbox id="colour_by_weights" data-param="w"
+            help-text="Make it easier to see differences in heavily populated areas">Weight legend quantiles by
+            population</sl-checkbox>
+        <br />
+        <sl-select id="colour_scheme" data-param="cs" label="Colour scheme" value="interpolateSpectral" hoist>
+        </sl-select>
+        <br />
+        <sl-checkbox id="colour_invert" data-param="ci">Invert colour scheme</sl-checkbox>
+    </sl-drawer>
+    <script>
+        const IS_MOBILE = navigator.userAgent.includes("Mobi")
+        function updateDrawerPlacement() {
+            const drawer = document.getElementById('settings');
+            if (IS_MOBILE) {
+                drawer.placement = 'top';
             }
-            window.addEventListener('DOMContentLoaded', updateDrawerPlacement);
-        </script>
-        <script type="module" src='app.js'></script>
-    </body>
+        }
+        window.addEventListener('DOMContentLoaded', updateDrawerPlacement);
+    </script>
+    <script type="module" src='app.js'></script>
+</body>
+
 </html>
