@@ -2,16 +2,38 @@ import { TileLayer, TileLayerProps, _Tile2DHeader as Tile2DHeader } from '@deck.
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import { load } from '@loaders.gl/core'
 import { ArrowLoader } from '@loaders.gl/arrow'
+import { ParquetWasmLoader } from '@loaders.gl/parquet'
 import type { ColumnarTable } from '@loaders.gl/schema'
 import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
+const PARQUET_WASM_URL = "./parquet_wasm_bg.wasm"
 
-export type ArrowColumnarData = ColumnarTable & {
-  data: {
-    index: string[]
-    value: number[]
-    [key: string]: ArrayLike<unknown>
+load("./data/test.parquet", ParquetWasmLoader, { parquet: { wasmUrl: PARQUET_WASM_URL, shape: 'columnar-table' } }).then(console.log)
+
+let logged = false;
+export type ArrowColumnarData = {
+  shape: 'columnar-table' | 'arrow-table'
+  data: any
+  schema?: any
+}
+
+export function getNumRows(table: ArrowColumnarData): number {
+  if (!table) return 0
+  if (table.shape === 'columnar-table') {
+    const first = Object.values(table.data)[0] as ArrayLike<any>
+    return first ? first.length : 0
   }
+  const tableData = table.shape === 'arrow-table' ? table.data : table
+  return tableData?.numRows ?? 0
+}
+
+export function getCol(table: ArrowColumnarData, name: string): any {
+  if (!table) return null
+  if (table.shape === 'columnar-table') {
+    return table.data?.[name]
+  }
+  const tableData = table.shape === 'arrow-table' ? table.data : table
+  return tableData?.getChild?.(name)
 }
 
 // Shared tile cache — survives layer replacement
@@ -21,6 +43,7 @@ export interface ArrowH3TileLayerExternalProps {
   getFillColor?: (value: number) => [number, number, number, number]
   colorDomain?: [number, number]
   onDataChange?: () => void
+  loader?: 'arrow' | 'parquet'
 }
 
 export interface ArrowH3TileLayerProps extends Omit<TileLayerProps<ArrowColumnarData>, 'data'>, ArrowH3TileLayerExternalProps {
@@ -29,7 +52,9 @@ export interface ArrowH3TileLayerProps extends Omit<TileLayerProps<ArrowColumnar
 
 export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   static defaultProps = {
+    ...TileLayer.defaultProps,
     TilesetClass: H3Tileset2D,
+    loader: 'arrow'
   }
 
   static layerName = 'ArrowH3TileLayer'
@@ -38,7 +63,12 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   getAllValues(): number[] {
     const values: number[] = []
     for (const tileData of tileCache.values()) {
-      values.push(...tileData.data.value)
+      const vCol = getCol(tileData, 'value')
+      const numRows = getNumRows(tileData)
+      for (let i = 0; i < numRows; i++) {
+        const val = vCol.at(i)
+        if (val !== undefined) values.push(Number(val))
+      }
     }
     return values
   }
@@ -61,8 +91,15 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     // Find the dominant resolution among visible tiles
     const resCounts = new Map<number, number>()
     for (const tile of visibleTiles) {
-      const res = h3.getResolution(tile.content.data.index[0])
-      resCounts.set(res, (resCounts.get(res) ?? 0) + tile.content.data.value.length)
+      const tileData = tile.content
+      const indices = getCol(tileData, 'index')
+      const values = getCol(tileData, 'value')
+      if (indices && values && getNumRows(tileData) > 0) {
+        const raw = indices.at(0)
+        const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
+        const res = h3.getResolution(idxStr)
+        resCounts.set(res, (resCounts.get(res) ?? 0) + getNumRows(tileData))
+      }
     }
     let dominantRes = 0
     let maxCount = 0
@@ -75,24 +112,37 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
     // Filter to only the dominant resolution
     const filteredTiles = visibleTiles.filter((t: any) => {
-      const res = h3.getResolution(t.content.data.index[0])
+      const indices = getCol(t.content, 'index')
+      const raw = indices?.at(0)
+      if (!raw) return false
+      const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
+      const res = h3.getResolution(idxStr)
       return res === dominantRes
     })
 
     let total = 0
     for (const tile of filteredTiles) {
-      total += tile.content.data.value.length
+      total += getNumRows(tile.content)
     }
 
     // Check if weight column exists
-    const hasWeights = filteredTiles.length > 0 && filteredTiles[0].content.data.weight !== undefined
+    const hasWeights = filteredTiles.length > 0 && getCol(filteredTiles[0].content, 'weight') !== undefined
 
     if (total <= maxSamples) {
       const values: number[] = []
       const weights: number[] = []
       for (const tile of filteredTiles) {
-        values.push(...tile.content.data.value)
-        if (hasWeights) weights.push(...tile.content.data.weight)
+        const valCol = getCol(tile.content, 'value')
+        const weightCol = hasWeights ? getCol(tile.content, 'weight') : null
+        const numRows = getNumRows(tile.content)
+        for (let i = 0; i < numRows; i++) {
+          const val = valCol.at(i)
+          if (val !== undefined) values.push(Number(val))
+          if (hasWeights && weightCol) {
+            const w = weightCol.at(i)
+            if (w !== undefined) weights.push(Number(w))
+          }
+        }
       }
       return hasWeights ? { values, weights } : { values }
     }
@@ -101,18 +151,26 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const weights: number[] = hasWeights ? new Array(maxSamples) : []
     let n = 0
     for (const tile of filteredTiles) {
-      const tileValues = tile.content.data.value
-      const tileWeights = hasWeights ? tile.content.data.weight : null
-      for (let i = 0; i < tileValues.length; i++) {
+      const tileData = tile.content
+      const tileValues = getCol(tileData, 'value')
+      const tileWeights = hasWeights ? getCol(tileData, 'weight') : null
+      const numRows = getNumRows(tileData)
+      for (let i = 0; i < numRows; i++) {
         n++
+        const valRaw = tileValues.at(i)
+        const weightRaw = tileWeights?.at(i)
+        if (valRaw === undefined) continue
+        const val = Number(valRaw)
+        const weight = weightRaw !== undefined ? Number(weightRaw) : 1
+
         if (n <= maxSamples) {
-          values[n - 1] = tileValues[i]
-          if (hasWeights && tileWeights) weights[n - 1] = tileWeights[i]
+          values[n - 1] = val
+          if (hasWeights) weights[n - 1] = weight
         } else {
           const j = Math.floor(Math.random() * n)
           if (j < maxSamples) {
-            values[j] = tileValues[i]
-            if (hasWeights && tileWeights) weights[j] = tileWeights[i]
+            values[j] = val
+            if (hasWeights) weights[j] = weight
           }
         }
       }
@@ -126,21 +184,24 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const results: { index: string[]; value: number[]; weight?: number[] }[] = []
 
     for (const tileData of tileCache.values()) {
-      const indices = tileData.data.index
-      const values = tileData.data.value
-      const weights: number[] = tileData.data.weight as number[] ?? []
+      const indices = getCol(tileData, 'index')
+      const values = getCol(tileData, 'value')
+      const weights = getCol(tileData, 'weight')
+      const numRows = getNumRows(tileData)
       const matchedIndices: string[] = []
       const matchedValues: number[] = []
       const matchedWeights: number[] = []
 
-      for (let i = 0; i < indices.length; i++) {
+      for (let i = 0; i < numRows; i++) {
         // Convert BigInt to hex string for comparison
-        const raw = indices[i] as unknown
+        const raw = indices.at(i) as unknown
         const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
         if (disk.has(idxStr)) {
           matchedIndices.push(idxStr)
-          matchedValues.push(values[i])
-          matchedWeights.push(weights[i] ?? 1)
+          const val = values.at(i)
+          if (val !== undefined) matchedValues.push(Number(val))
+          const w = weights?.at(i)
+          matchedWeights.push(w !== undefined ? Number(w) : 1)
         }
       }
 
@@ -156,14 +217,19 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   async getTileData(tile: { index: H3TileIndex }): Promise<ArrowColumnarData> {
     const h3Index = tile.index.i
     const resolution = h3.getResolution(tile.index.i)
-    const response = await (this.props as unknown as ArrowH3TileLayerProps).data({ h3Index, resolution })
+    const { data: dataGen, loader } = this.props as unknown as ArrowH3TileLayerProps
+    const response = await dataGen({ h3Index, resolution })
 
-    const data = load(response, ArrowLoader, {
-      arrow: {
-        shape: 'columnar-table',
-      },
+    const data = await load(response, loader === 'parquet' ? ParquetWasmLoader : ArrowLoader, {
+      parquet: { wasmUrl: PARQUET_WASM_URL },
+      arrow: { shape: 'columnar-table' },
+      shape: 'arrow-table'
     })
-    return data as unknown as Promise<ArrowColumnarData>
+    if (!logged) {
+      console.log(data)
+      logged = true
+    }
+    return data as ArrowColumnarData
   }
 
   renderSubLayers(props: any) {
@@ -172,20 +238,24 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const getFillColor = extProps.getFillColor
     const colorDomain = extProps.colorDomain
 
-    if (!data || data.data.index.length === 0) return null
+    const h3Indices = getCol(data, 'index')
+    const values = getCol(data, 'value')
+    const numRows = getNumRows(data)
 
-    const h3Indices = data.data.index
-    const values = data.data.value
+    if (!h3Indices || !values || numRows === 0) return null
 
     return new H3HexagonLayer({
       ...props,
       id: `${props.id}-${tile.index.i}`,
-      data: { length: values.length },
+      data: { length: numRows },
 
-      getHexagon: (_d: unknown, { index }: { index: number }) => h3Indices.at(index)!.toString(16),
+      getHexagon: (_d: unknown, { index }: { index: number }) => {
+        const raw = h3Indices.at(index)!
+        return typeof raw === 'bigint' ? raw.toString(16) : raw.toString()
+      },
 
       getFillColor: getFillColor
-        ? (_d: unknown, { index }: { index: number }) => getFillColor(values.at(index)!)
+        ? (_d: unknown, { index }: { index: number }) => getFillColor(Number(values.at(index)!))
         : (_d: unknown, { index }: { index: number }) => [128, 128, 128, 255] as [number, number, number, number],
 
       updateTriggers: {

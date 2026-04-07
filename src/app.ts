@@ -7,7 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import * as observablehq from './vendor/observablehq'
 import * as aq from 'arquero'
 import * as h3 from 'h3-js'
-import { ArrowH3TileLayer } from './ArrowH3TileLayer'
+import { ArrowH3TileLayer, getCol } from './ArrowH3TileLayer'
 import { D3LineChart } from './d3-line-chart'
 import { findClosestCity } from './tiny-cities'
 import tinyCities from './tiny-cities.json'
@@ -86,7 +86,9 @@ function human(number: number): string {
   return parseFloat(number.toPrecision(2)).toLocaleString()
 }
 
+const LOADER = 'arrow'
 function chQuery(query: string): Promise<Response> {
+  // return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format parquet")}`, {
   return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format arrow settings output_format_arrow_compression_method = 'none'")}`, {
     headers: new Headers({
       Authorization: `Basic ${btoa(username + ':' + password)}`,
@@ -100,7 +102,7 @@ let accumulateCities = urlParams.has('acc') && urlParams.get('acc') !== '0' && u
 let colourByWeights = urlParams.has('w') && urlParams.get('w') !== '0' && urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + (IS_MOBILE ? 2 : 3) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
+      select h3ToParent(h3, least(${resolution + 2 + (IS_MOBILE ? 0 : 1) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
       sum(population)/(h3CellAreaM2(index)/(1000*1000)) _value,
       if(_value = 0, 0, 
           round(_value * pow(10, 3 - 1 - floor(log10(abs(_value))))) 
@@ -195,6 +197,7 @@ function updateLegend(colourByWeights: boolean) {
     getFillColor: getColour(getQuantile),
     colorDomain: [0, 1],
     onDataChange: throttledUpdateLegend(colourByWeights),
+    loader: LOADER,
   })
   mapOverlay.setProps({
     layers: [h3Layer],
@@ -230,6 +233,7 @@ let h3Layer = new ArrowH3TileLayer({
   getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
   onDataChange: throttledUpdateLegend(colourByWeights),
+  loader: LOADER,
 })
 
 // Capture shift state at mousedown time (before keyup can interfere)
@@ -242,12 +246,17 @@ const mapOverlay = new MapboxOverlay({
     makeHighlight(info, undefined, clickShiftState || accumulateCities)
   },
   getTooltip: (info: any) => {
-    if (info.index === undefined || !info.sourceTile?.content?.data) return null
+    if (info.index === undefined || !info.sourceTile?.content) return null
 
     const idx = info.index
-    const data = info.sourceTile.content.data
-    const h3Index = typeof data.index[idx] === 'bigint' ? data.index[idx].toString(16) : data.index[idx]
-    const value = data.value[idx]
+    const data = info.sourceTile.content
+    const indices = getCol(data, 'index')
+    const values = getCol(data, 'value')
+    if (!indices || !values) return null
+
+    const raw = indices.at(idx)
+    const h3Index = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
+    const value = values.at(idx)
 
     if (value === undefined) return null
 
@@ -292,15 +301,17 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     const radius = force_radius ?? Number((document.getElementById('desired_radius') as HTMLInputElement).value)
 
     // Get the clicked H3 index from the tile content
-    const clickedIndexBigInt = info.sourceTile?.content?.data?.index?.[info.index]
-    if (clickedIndexBigInt === undefined) {
+    const data = info.sourceTile?.content
+    const indices = getCol(data, 'index')
+    const clickedIndexRaw = indices?.at(info.index)
+    if (clickedIndexRaw === undefined) {
       console.warn('[makeHighlight] Could not find clicked H3 index')
       return
     }
     // Convert BigInt to hex string for h3-js
-    const clickedIndex = typeof clickedIndexBigInt === 'bigint'
-      ? clickedIndexBigInt.toString(16)
-      : String(clickedIndexBigInt)
+    const clickedIndex = typeof clickedIndexRaw === 'bigint'
+      ? clickedIndexRaw.toString(16)
+      : String(clickedIndexRaw)
 
     // Get all matching cells from loaded tiles
     const matchedTiles = h3Layer.getCellsInRadius(clickedIndex, radius)
@@ -746,6 +757,7 @@ registerSetting<number>({
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
       onDataChange: throttledUpdateLegend(colourByWeights),
+      loader: LOADER,
     })
     mapOverlay.setProps({
       layers: [h3Layer],
@@ -790,6 +802,7 @@ registerSetting<boolean>({
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
       onDataChange: throttledUpdateLegend(colourByWeights),
+      loader: LOADER,
     })
     mapOverlay.setProps({
       layers: [h3Layer],
@@ -816,6 +829,7 @@ registerSetting<string>({
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
       onDataChange: throttledUpdateLegend(colourByWeights),
+      loader: LOADER,
     })
     mapOverlay.setProps({
       layers: [h3Layer],
@@ -840,6 +854,7 @@ registerSetting<boolean>({
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
       onDataChange: throttledUpdateLegend(colourByWeights),
+      loader: LOADER,
     })
     mapOverlay.setProps({
       layers: [h3Layer],

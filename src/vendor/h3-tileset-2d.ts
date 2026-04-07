@@ -86,19 +86,32 @@ function tileToBoundingBox(index: string): GeoBoundingBox {
   return padBoundingBox(bbox, getResolution(index), 0.12)
 }
 
-const BIAS = 2
+const BIAS = 2; 
 export function getHexagonResolution(
   viewport: { zoom: number; latitude: number },
   tileSize: number
 ): number {
-  const zoomOffset = Math.log2(tileSize / 512)
-  const hexagonScaleFactor = (2 / 3) * (viewport.zoom - zoomOffset)
-  const latitudeScaleFactor = Math.log(1 / Math.cos((Math.PI * viewport.latitude) / 180))
-
-  const vanilla_zoom = Math.max(0, Math.floor(hexagonScaleFactor + latitudeScaleFactor - BIAS))
-  return vanilla_zoom
-  // return Math.max(0, Math.floor((vanilla_zoom + 1) / 2) * 2 - 1) // odd only
+  const zoomOffset = Math.log2(tileSize / 512);
+  const h3ScaleFactor = 2 / Math.log2(7); // ~0.7124
+  const latRad = (Math.PI * viewport.latitude) / 180;
+  const latitudeAdjustment = Math.log2(1 / Math.cos(latRad));
+  const exactResolution = h3ScaleFactor * (viewport.zoom - zoomOffset + latitudeAdjustment) - BIAS;
+  return Math.max(0, Math.min(15, Math.floor(exactResolution)));
 }
+
+// const BIAS = 5
+// export function getHexagonResolution(
+//   viewport: { zoom: number; latitude: number },
+//   tileSize: number
+// ): number {
+//   const zoomOffset = Math.log2(tileSize / 512)
+//   const hexagonScaleFactor = (2 / 3) * (viewport.zoom - zoomOffset)
+//   const latitudeScaleFactor = Math.log(1 / Math.cos((Math.PI * viewport.latitude) / 180))
+
+//   const vanilla_zoom = Math.max(0, Math.floor(hexagonScaleFactor + latitudeScaleFactor - BIAS))
+//   return vanilla_zoom
+//   // return Math.max(0, Math.floor((vanilla_zoom + 1) / 2) * 2 - 1) // odd only
+// }
 
 // Tileset2D is not generic over TileIndex, so we need to suppress type errors
 // when overriding methods that use our custom H3TileIndex type.
