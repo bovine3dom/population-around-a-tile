@@ -8,9 +8,6 @@ import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
 const PARQUET_WASM_URL = "./parquet_wasm_bg.wasm"
 
-load("./data/test.parquet", ParquetWasmLoader, { parquet: { wasmUrl: PARQUET_WASM_URL, shape: 'columnar-table' } }).then(console.log)
-
-let logged = false;
 export type ArrowColumnarData = {
   shape: 'columnar-table' | 'arrow-table'
   data: any
@@ -225,10 +222,6 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       arrow: { shape: 'columnar-table' },
       shape: 'arrow-table'
     })
-    if (!logged) {
-      console.log(data)
-      logged = true
-    }
     return data as ArrowColumnarData
   }
 
