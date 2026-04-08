@@ -353,8 +353,6 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     const last25Density = (dt.orderby('q25_dist').get('value', 0) as number)
     lastLandDensity = (dt.rollup({ median: (d: any) => aq.op.median(d.value) }).get('median') as number)
 
-    lastPop = Number(dt.rollup({ total: (d: any) => aq.op.sum(d.value) }).get('total'))
-
     const res = h3.getResolution(dt.get('index', 0) as string)
     const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
     const diamKm = h3.getHexagonEdgeLengthAvg(res, 'km') * 2
@@ -451,6 +449,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     console.table(ringStats)
     console.table(ecdfData)
     console.table(cumPopData)
+    lastPop = runningPop
 
     // Build or append chart data
     if (append) {
@@ -466,7 +465,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
             <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
-            <p>Total population: <b>${human(lastPop * areaKm2)}</b>                                                                          </p>
+            <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
             `
       ; (document.getElementById('settings') as any).show()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(dt)] })
