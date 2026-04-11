@@ -599,7 +599,7 @@ function renderEcdfChart() {
     colors.push(loc.color)
   }
 
-  const chartTitle = "Population density versus weighted percentile"
+  const chartTitle = "Population / km² versus weighted percentile"
 
   const chartEl = document.getElementById('ecdf_chart')!
   const chartData = {
