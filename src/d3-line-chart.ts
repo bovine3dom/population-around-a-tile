@@ -1,4 +1,5 @@
 import * as d3 from 'd3'
+import { human } from './format'
 
 interface Dataset {
     name: string
@@ -340,12 +341,12 @@ export class D3LineChart {
                         .style('top', (py - 10) + 'px')
                         .style('left', (px + 10) + 'px')
                         .html(`
-                            ${pointsAtX.map(p => `
+                            ${pointsAtX.sort((l, r) => r.y - l.y).map(p => `
                                 <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 2px;">
                                     <div style="width: 8px; height: 8px; background-color: ${p.color};"></div>
                                     <span style="color: ${p.color}">${p.name}:</span>
-                                    <span style="font-weight: bold;">${typeof p.y === 'number' ? p.y.toLocaleString() : p.y}</span>
-                                    <span style="font-size: 0.9em; color: #888;">&nbsp;(@ ${typeof p.x === 'number' ? p.x.toFixed(2) : p.x} km)</span>
+                                    <span style="font-weight: bold;">${typeof p.y === 'number' ? human(p.y, 3) : p.y}</span>
+                                    <span style="font-size: 0.9em; color: #888;">&nbsp;(@ ${typeof p.x === 'number' ? human(p.x, 3) : p.x})</span>
                                 </div>
                             `).join('')}
                         `)

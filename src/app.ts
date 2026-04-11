@@ -9,6 +9,7 @@ import * as aq from 'arquero'
 import * as h3 from 'h3-js'
 import { ArrowH3TileLayer, getCol } from './ArrowH3TileLayer'
 import { D3LineChart } from './d3-line-chart'
+import { human } from './format'
 import { findClosestCity } from './tiny-cities'
 import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
@@ -81,10 +82,6 @@ const _getColour = (getQuantile: (v: number) => number) => (v: number): [number,
   return [rgb[0], rgb[1], rgb[2], 255]
 }
 const getColour = memoise(_getColour)
-
-function human(number: number): string {
-  return parseFloat(number.toPrecision(2)).toLocaleString()
-}
 
 const LOADER = 'arrow'
 const CACHE_NAME = 'clickhouse-queries-v0.1'
