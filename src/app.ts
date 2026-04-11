@@ -1,5 +1,6 @@
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
+import { BloomFilter } from 'bloomfilter'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
 import * as d3s from 'd3-scale-chromatic'
@@ -123,7 +124,38 @@ const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: 
   `
   return chQuery(query)
 })
-const chquerygen = memoise(_chquerygen)
+
+// we need a row-less arrow file that has the right schema. so let's ask clickhouse nicely
+// 1) use ch endpoint
+// 3) open network tab
+// 3) go over the sea
+// 4) copy an empty (not preflight) response as curl
+// 5) curl ... | base64, copy that
+const static_endpoint = "data/kontur_export/" // "http://localhost:1980/"
+const EMPTY_ARROW = "QVJST1cxAAD/////EAEAABAAAAAAAAoADAAGAAUACAAKAAAAAAEEAAwAAAAIAAgAAAAEAAgAAAAEAAAABAAAAKwAAABkAAAANAAAAAQAAAB0////AAAAAxAAAAAYAAAABAAAAAAAAAAGAAAAd2VpZ2h0AACm////AAACAKD///8AAAADEAAAABgAAAAEAAAAAAAAAAUAAAB2YWx1ZQAAANL///8AAAIAzP///wAAAAMQAAAAIAAAAAQAAAAAAAAABgAAAF92YWx1ZQAAAAAGAAgABgAGAAAAAAACABAAFAAIAAAABwAMAAAAEAAQAAAAAAAAAhAAAAAcAAAABAAAAAAAAAAFAAAAaW5kZXgABgAIAAQABgAAAEAAAAAAAAAA/////wAAAAAQAAAADAAUAAYACAAMABAADAAAAAAABAAcAAAADAAAAAQAAAAAAAAAAAAAAAgACAAAAAQACAAAAAQAAAAEAAAArAAAAGQAAAA0AAAABAAAAHT///8AAAADEAAAABgAAAAEAAAAAAAAAAYAAAB3ZWlnaHQAAKb///8AAAIAoP///wAAAAMQAAAAGAAAAAQAAAAAAAAABQAAAHZhbHVlAAAA0v///wAAAgDM////AAAAAxAAAAAgAAAABAAAAAAAAAAGAAAAX3ZhbHVlAAAAAAYACAAGAAYAAAAAAAIAEAAUAAgAAAAHAAwAAAAQABAAAAAAAAACEAAAABwAAAAEAAAAAAAAAAUAAABpbmRleAAGAAgABAAGAAAAQAAAABwBAABBUlJPVzE="
+const EMPTY_PROMISE = fetch(`data:application/octet-stream;base64,${EMPTY_ARROW}`);
+const emptyArrow = async () => (await EMPTY_PROMISE).clone()
+// build with ../scripts/make_bloom.js
+const TILE_FILTER_PROMISE = fetch(`bloom.json`).then(r => r.json()).then(r => BloomFilter.fromJSON(r))
+
+function __chquerygen(resolution_modifier: number) {
+  return async ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
+    // const validTiles = await VALID_TILES_PROMISE
+    const filter = await TILE_FILTER_PROMISE
+    if (!filter.test(h3Index)) {
+      return emptyArrow()
+    }
+    const response = await fetch(`${static_endpoint}tile_id=${h3Index}/part0.arrow`)
+    if (!response.ok) {
+      if (response.status === 404) {
+        return emptyArrow()
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response
+  }
+}
+const chquerygen = memoise(__chquerygen)
 
 // ---- Legend ----
 let legendElement: SVGSVGElement | null = null

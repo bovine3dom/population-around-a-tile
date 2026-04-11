@@ -6,6 +6,7 @@
         "watch": "bun build --watch --sourcemap=linked --bundle --outdir=map src/app.ts",
         "serve": "http-server map -p 1983 -c-1",
         "postinstall": "cp node_modules/@loaders.gl/parquet/dist/parquet_wasm_bg.wasm map/",
+        "make-bloom": "bun scripts/make_bloom.js",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
@@ -13,6 +14,7 @@
         "@loaders.gl/parquet": "4.3.4",
         "@types/geokdbush": "^1.1.5",
         "arquero": "^5.4.1",
+        "bloomfilter": "^1.1.0",
         "d3": "^7.9.0",
         "d3-dsv": "^3.0.1",
         "d3-scale-chromatic": "^3.1.0",
