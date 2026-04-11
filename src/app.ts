@@ -1,5 +1,6 @@
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
+// @ts-expect-error no types :(
 import { BloomFilter } from 'bloomfilter'
 import maplibregl from 'maplibre-gl'
 import * as d3 from 'd3'
@@ -400,7 +401,6 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     lastLandDensity = (dt.rollup({ median: (d: any) => aq.op.median(d.value) }).get('median') as number)
 
     const first_cell = dt.get('index', 0) as string
-    const res = h3.getResolution(first_cell)
     const areaKm2 = h3.cellArea(first_cell, 'km2')
     const diamKm = Math.sqrt(areaKm2 / 3) * 2 // area = 3 * big radius * little radius. so sqrt(area / 3) = somewhere between the two
 
@@ -797,7 +797,6 @@ registerSetting<number>({
   serialize: (v) => String(v),
   onChange: (value) => {
     RESOLUTION_MODIFIER = value + (IS_MOBILE ? -1 : 0)
-    console.log(RESOLUTION_MODIFIER)
     h3Layer = new ArrowH3TileLayer({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
