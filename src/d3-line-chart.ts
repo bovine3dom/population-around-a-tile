@@ -233,6 +233,7 @@ export class D3LineChart {
                 .attr('stroke', color)
                 .attr('stroke-width', 2)
                 .attr('d', line as any)
+                .attr('class', `chart-series-${i}`)
 
             // Visible points (if not hidden)
             if (!options.lineOptions?.hideDots) {
@@ -358,39 +359,86 @@ export class D3LineChart {
                 this.tooltip.style('visibility', 'hidden')
             })
 
-        // Legend (basic)
-        if (datasets.length > 1 || (datasets.length === 1 && datasets[0].name !== 'Dataset')) {
-            const legend = this.svg.append('g')
+            if (datasets.length > 1 || (datasets.length === 1 && datasets[0].name !== 'Dataset')) {
+                const legend = this.svg.append('g')
                 .attr('transform', `translate(${this.margin.left}, ${height - this.margin.bottom + 25})`)
+                const selectedIndices = new Set();
+                let hoveredIndex: number | null = null;
+                let hoverSuppressed = false;
+                const updateVisibility = () => {
+                    datasets.forEach((_, idx) => {
+                        let isHighlight = false;
 
-            let currentX = 0
-            let currentY = 0
-            const rowHeight = 15
-            datasets.forEach((dataset, i) => {
-                const color = this.colors[i % this.colors.length]
-                const itemWidth = dataset.name.length * 7 + 25 // Approximate width
+                        if (selectedIndices.size > 0) {
+                            isHighlight = selectedIndices.has(idx) || (hoveredIndex === idx && !hoverSuppressed);
+                        } else if (hoveredIndex !== null && !hoverSuppressed) {
+                            isHighlight = (idx === hoveredIndex);
+                        } else {
+                            isHighlight = true;
+                        }
 
-                if (currentX + itemWidth > innerWidth && i > 0) {
-                    currentX = 0
-                    currentY += rowHeight
-                }
+                        const opacity = isHighlight ? 1 : 0.2;
 
-                const legendItem = legend.append('g')
+                        this.svg.selectAll(`.legend-item-${idx}`).style('opacity', opacity);
+                        this.svg.selectAll(`.chart-series-${idx}`).style('opacity', opacity);
+
+                        if (isHighlight) {
+                            this.svg.selectAll(`.chart-series-${idx}`).raise();
+                        }
+                    });
+                };
+
+                let currentX = 0;
+                let currentY = 0;
+                const rowHeight = 15;
+
+                datasets.forEach((dataset, i) => {
+                    const color = this.colors[i % this.colors.length]
+                    const itemWidth = dataset.name.length * 7 + 25 
+
+                    if (currentX + itemWidth > innerWidth && i > 0) {
+                        currentX = 0
+                        currentY += rowHeight
+                    }
+
+                    const legendItem = legend.append('g')
+                    .attr('class', `legend-item-${i}`) 
                     .attr('transform', `translate(${currentX}, ${currentY})`)
+                    .style('cursor', 'pointer')        
 
-                legendItem.append('rect')
+                    .on('mouseenter', () => {
+                        hoverSuppressed = false;
+                        hoveredIndex = i;
+                        updateVisibility();
+                    })
+                    .on('mouseleave', () => {
+                        hoveredIndex = null;
+                        updateVisibility();
+                    })
+                    .on('click', (event) => {
+                        hoverSuppressed = true;
+                        if (selectedIndices.has(i)) {
+                            selectedIndices.delete(i);
+                        } else {
+                            selectedIndices.add(i);
+                        }
+                        updateVisibility();
+                    });
+
+                    legendItem.append('rect')
                     .attr('width', 10)
                     .attr('height', 10)
                     .attr('fill', color)
 
-                legendItem.append('text')
+                    legendItem.append('text')
                     .attr('x', 15)
                     .attr('y', 9)
                     .style('font-size', '10px')
+                    .style('user-select', 'none') 
                     .text(dataset.name)
 
-                currentX += itemWidth
-            })
-        }
+                    currentX += itemWidth
+                })
+            }
     }
 }
