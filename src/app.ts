@@ -13,6 +13,7 @@ import { human } from './format'
 import { findClosestCity } from './tiny-cities'
 import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
+;(window as any).h3 = h3
 
 const username = 'public_web';
 const password = 'a2hkayBzZGlsO2RqIHNsayBsYWpzZCBmbGogc2Rsa2og';
@@ -376,9 +377,10 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     const last25Density = (dt.orderby('q25_dist').get('value', 0) as number)
     lastLandDensity = (dt.rollup({ median: (d: any) => aq.op.median(d.value) }).get('median') as number)
 
-    const res = h3.getResolution(dt.get('index', 0) as string)
-    const areaKm2 = h3.getHexagonAreaAvg(res, 'km2')
-    const diamKm = h3.getHexagonEdgeLengthAvg(res, 'km') * 2
+    const first_cell = dt.get('index', 0) as string
+    const res = h3.getResolution(first_cell)
+    const areaKm2 = h3.cellArea(first_cell, 'km2')
+    const diamKm = Math.sqrt(areaKm2 / 3) * 2 // area = 3 * big radius * little radius. so sqrt(area / 3) = somewhere between the two
 
     // Log density quantiles per hollow ring
     const ringStats: { distance: number; median: number; q25: number; q75: number; count: number }[] = []
@@ -457,11 +459,11 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
       for (const g of matchedTiles) {
         for (let i = 0; i < g.index.length; i++) {
           if (ringSet.has(g.index[i])) {
-            ringPop += g.value[i]
+            ringPop += g.value[i] * h3.cellArea(g.index[i], 'km2')
           }
         }
       }
-      runningPop += ringPop * areaKm2
+      runningPop += ringPop
       cumPopData.push({ distance: d * diamKm, cumPop: runningPop })
     }
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
@@ -487,7 +489,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
 
     document.getElementById('results_text')!.innerHTML = `
             <p><b>${cityLabel}</b>:</p>
-            <p>Approx radius: ${human(h3.getHexagonEdgeLengthAvg(res, 'km') * 2 * radius + 1)} km </p>
+            <p>Approx radius: ${human(diamKm * radius)} km </p>
             <p>Median population density weighted by population: <b>${human(lastDensity)}</b> / km², 75th percentile: <b>${human(last75Density)}</b> / km², 25th percentile: <b>${human(last25Density)}</b> / km² </p>
             <p>Median population density weighted by populated land area: <b>${human(lastLandDensity)}</b> / km²                   </p>
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
