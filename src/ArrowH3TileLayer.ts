@@ -41,6 +41,7 @@ export interface ArrowH3TileLayerExternalProps {
   colorDomain?: [number, number]
   onDataChange?: () => void
   loader?: 'arrow' | 'parquet'
+  resBias?: number
 }
 
 export interface ArrowH3TileLayerProps extends Omit<TileLayerProps<ArrowColumnarData>, 'data'>, ArrowH3TileLayerExternalProps {
@@ -51,10 +52,19 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   static defaultProps = {
     ...TileLayer.defaultProps,
     TilesetClass: H3Tileset2D,
-    loader: 'arrow'
+    loader: 'arrow',
+    resBias: 0
   }
 
   static layerName = 'ArrowH3TileLayer'
+
+  _getTilesetOptions() {
+    const { resBias } = this.props as unknown as ArrowH3TileLayerProps
+    return {
+      ...super._getTilesetOptions(),
+      resBias
+    }
+  }
 
   // Collect all loaded values
   getAllValues(): number[] {
@@ -220,7 +230,6 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const data = await load(response, loader === 'parquet' ? ParquetWasmLoader : ArrowLoader, {
       parquet: { wasmUrl: PARQUET_WASM_URL },
       arrow: { shape: 'columnar-table' },
-      shape: 'arrow-table'
     })
     return data as ArrowColumnarData
   }

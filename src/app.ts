@@ -106,7 +106,7 @@ async function chQuery(query: string): Promise<Response> {
 }
 
 const urlParams = new URLSearchParams(window.location.search)
-let RESOLUTION_MODIFIER = urlParams.has('res') ? Number(urlParams.get('res')) : 0
+let RESOLUTION_MODIFIER = (urlParams.has('res') ? Number(urlParams.get('res')) : 0 ) + (IS_MOBILE ? -1 : 0)
 let accumulateCities = urlParams.has('acc') && urlParams.get('acc') !== '0' && urlParams.get('acc') !== 'false'
 let colourByWeights = urlParams.has('w') && urlParams.get('w') !== '0' && urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
@@ -136,11 +136,10 @@ const EMPTY_ARROW = "QVJST1cxAAD/////EAEAABAAAAAAAAoADAAGAAUACAAKAAAAAAEEAAwAAAA
 const EMPTY_PROMISE = fetch(`data:application/octet-stream;base64,${EMPTY_ARROW}`);
 const emptyArrow = async () => (await EMPTY_PROMISE).clone()
 // build with ../scripts/make_bloom.js
-const TILE_FILTER_PROMISE = fetch(`bloom.json`).then(r => r.json()).then(r => BloomFilter.fromJSON(r))
+const TILE_FILTER_PROMISE = fetch(`${static_endpoint}bloom.json`).then(r => r.json()).then(r => BloomFilter.fromJSON(r))
 
-function __chquerygen(resolution_modifier: number) {
-  return async ({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
-    // const validTiles = await VALID_TILES_PROMISE
+function __chquerygen(_resolution_modifier: number) {
+  return async ({ h3Index }: { h3Index: string; resolution: number }) => {
     const filter = await TILE_FILTER_PROMISE
     if (!filter.test(h3Index)) {
       return emptyArrow()
@@ -233,13 +232,15 @@ function updateLegend(colourByWeights: boolean) {
     id: 'H3TileLayer',
     // @ts-expect-error custom data function and layer type
     data: chquerygen(RESOLUTION_MODIFIER),
+    resBias: RESOLUTION_MODIFIER,
+    maxZoom: 8,
     pickable: true,
     getFillColor: getColour(getQuantile),
     colorDomain: [0, 1],
     onDataChange: throttledUpdateLegend(colourByWeights),
     loader: LOADER,
   })
-    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+  mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
 
 }
 
@@ -269,6 +270,8 @@ let h3Layer = new ArrowH3TileLayer({
   id: 'H3TileLayer',
   // @ts-expect-error custom data function and layer type
   data: chquerygen(RESOLUTION_MODIFIER),
+  resBias: RESOLUTION_MODIFIER,
+  maxZoom: 8,
   pickable: true,
   getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
@@ -791,18 +794,22 @@ registerSetting<number>({
   parse: (raw) => raw !== null ? Number(raw) : 0,
   serialize: (v) => String(v),
   onChange: (value) => {
-    RESOLUTION_MODIFIER = value
+    RESOLUTION_MODIFIER = value + (IS_MOBILE ? -1 : 0)
+    console.log(RESOLUTION_MODIFIER)
     h3Layer = new ArrowH3TileLayer({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
       data: chquerygen(RESOLUTION_MODIFIER),
+      resBias: RESOLUTION_MODIFIER,
+      maxZoom: 8,
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
       onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+    mapOverlay.setProps({ layers: [] })
+    setTimeout(() => mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] }), 0)
   },
 })
 
@@ -839,6 +846,8 @@ registerSetting<boolean>({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
       data: chquerygen(RESOLUTION_MODIFIER),
+      resBias: RESOLUTION_MODIFIER,
+      maxZoom: 8,
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
@@ -864,6 +873,8 @@ registerSetting<string>({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
       data: chquerygen(RESOLUTION_MODIFIER),
+      resBias: RESOLUTION_MODIFIER,
+      maxZoom: 8,
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
@@ -887,6 +898,8 @@ registerSetting<boolean>({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
       data: chquerygen(RESOLUTION_MODIFIER),
+      resBias: RESOLUTION_MODIFIER,
+      maxZoom: 8,
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],

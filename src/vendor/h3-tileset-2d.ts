@@ -86,17 +86,20 @@ function tileToBoundingBox(index: string): GeoBoundingBox {
   return padBoundingBox(bbox, getResolution(index), 0.12)
 }
 
-const BIAS = 2; 
+const BIAS = 2;
 export function getHexagonResolution(
   viewport: { zoom: number; latitude: number },
-  tileSize: number
+  tileSize: number,
+  resBias: number = 0
 ): number {
   const zoomOffset = Math.log2(tileSize / 512);
   const h3ScaleFactor = 2 / Math.log2(7); // ~0.7124
   const latRad = (Math.PI * viewport.latitude) / 180;
   const latitudeAdjustment = Math.log2(1 / Math.cos(latRad));
-  const exactResolution = h3ScaleFactor * (viewport.zoom - zoomOffset + latitudeAdjustment) - BIAS;
-  return Math.max(0, Math.min(15, Math.floor(exactResolution)));
+  const BIAS = 2; // Default bias
+  const exactResolution = h3ScaleFactor * (viewport.zoom - zoomOffset + latitudeAdjustment) - (BIAS - resBias);
+  const MY_MAX_TILE_SIZE = 5 // 15
+  return Math.max(0, Math.min(MY_MAX_TILE_SIZE, Math.floor(exactResolution))); // i don't like hacking this in here but whatever
 }
 
 // const BIAS = 5
@@ -120,21 +123,18 @@ export default class H3Tileset2D extends Tileset2D {
   getTileIndices({ viewport, minZoom, maxZoom }: { viewport: { latitude?: number; longitude: number; zoom: number; getBounds(): [number, number, number, number] }; minZoom?: number; maxZoom?: number }): H3TileIndex[] {
     if (viewport.latitude === undefined) return []
     const [west, south, east, north] = viewport.getBounds()
-    const { tileSize } = this.opts as { tileSize: number }
+    const { tileSize, resBias = 0 } = this.opts as { tileSize: number; resBias?: number }
 
-    let z = getHexagonResolution({ zoom: viewport.zoom, latitude: viewport.latitude }, tileSize)
+    let z = getHexagonResolution({ zoom: viewport.zoom, latitude: viewport.latitude }, tileSize, resBias)
     let indices: string[]
     if (typeof minZoom === 'number' && Number.isFinite(minZoom) && z < minZoom) {
       return []
     }
     if (typeof maxZoom === 'number' && Number.isFinite(maxZoom) && z > maxZoom) {
       z = maxZoom
-      const center = latLngToCell(viewport.latitude, viewport.longitude, maxZoom)
-      indices = gridDisk(center, 1)
-    } else {
-      const paddedBounds = padBoundingBox({ west, north, east, south }, z)
-      indices = getHexagonsInBoundingBox(paddedBounds, z)
     }
+    const paddedBounds = padBoundingBox({ west, north, east, south }, z)
+    indices = getHexagonsInBoundingBox(paddedBounds, z)
 
     return indices.map(i => ({ i }))
   }
