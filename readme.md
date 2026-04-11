@@ -1,6 +1,6 @@
 # Population around a tile
 
-https://o.blanthorn.com/population-around-a-tile/map/
+<a href="https://o.blanthorn.com/population-around-a-tile/map/">Visit the map here</a>
 
 A 'simple' data vis tool using MapLibre GL and deck.gl to display a pre-computed population hex grid itself tiled by hexes and served from a bog-standard HTTP server.
 
