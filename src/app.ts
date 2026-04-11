@@ -87,13 +87,24 @@ function human(number: number): string {
 }
 
 const LOADER = 'arrow'
-function chQuery(query: string): Promise<Response> {
+const CACHE_NAME = 'clickhouse-queries-v0.1'
+async function chQuery(query: string): Promise<Response> {
+  const req = `${ch_endpoint}/?query=${encodeURIComponent(query + " format arrow settings output_format_arrow_compression_method = 'none'")}`
+  const cache = await caches.open(CACHE_NAME)
+  const cachedResponse = await cache.match(req)
+  if (cachedResponse) {
+    return cachedResponse
+  }
   // return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format parquet")}`, {
-  return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format arrow settings output_format_arrow_compression_method = 'none'")}`, {
+  const response = await fetch(req, {
     headers: new Headers({
       Authorization: `Basic ${btoa(username + ':' + password)}`,
     }),
   })
+  if (response.ok) {
+    cache.put(req, response.clone())
+  }
+  return response
 }
 
 const urlParams = new URLSearchParams(window.location.search)
