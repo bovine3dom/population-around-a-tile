@@ -199,9 +199,7 @@ function updateLegend(colourByWeights: boolean) {
     onDataChange: throttledUpdateLegend(colourByWeights),
     loader: LOADER,
   })
-  mapOverlay.setProps({
-    layers: [h3Layer],
-  })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
 
 }
 
@@ -222,6 +220,8 @@ let chartLocations: {
   ecdfData: { quantile: number; value: number }[]
   cumPopData: { distance: number; cumPop: number }[]
 }[] = []
+
+let cumulativeHighlightDt: any = null
 
 const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db', '#00ced1', '#ffd700']
 
@@ -273,8 +273,9 @@ const mapOverlay = new MapboxOverlay({
   layers: [h3Layer],
 })
 
-const getHighlightData = (df: any) =>
-  new H3HexagonLayer({
+const getHighlightData = (df: any) => {
+  if (df == null) return undefined
+  return new H3HexagonLayer({
     id: 'selectedHex',
     ish3: true,
     data: df.objects(),
@@ -284,6 +285,7 @@ const getHighlightData = (df: any) =>
     getFillColor: () => [0, 255, 0, 100] as [number, number, number, number],
     pickable: true,
   })
+}
 
 function makeHighlight(info: any | undefined, force_radius: number | undefined, append = false) {
   lastInfo = info ?? lastInfo
@@ -291,9 +293,9 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     return
   }
   if (info.layer.id === 'selectedHex') {
-    mapOverlay.setProps({
-      layers: [h3Layer],
-    })
+    chartLocations = []
+    cumulativeHighlightDt = null
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     return
   }
   // Accept clicks on any layer (not just ones with ish3 prop)
@@ -454,8 +456,10 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     // Build or append chart data
     if (append) {
       chartLocations.push({ city: cityLabel, lat: centerLat, lon: centerLon, ringStats, centerValue, color: COLORS[chartLocations.length % COLORS.length], ecdfData, cumPopData })
+      cumulativeHighlightDt = cumulativeHighlightDt ? cumulativeHighlightDt.concat(dt) : dt
     } else {
       chartLocations = [{ city: cityLabel, lat: centerLat, lon: centerLon, ringStats, centerValue, color: COLORS[0], ecdfData, cumPopData }]
+      cumulativeHighlightDt = dt
     }
 
     renderChart()
@@ -468,7 +472,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
             <p>Total population: <b>${human(lastPop)}</b>                                                                          </p>
             `
       ; (document.getElementById('settings') as any).show()
-    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(dt)] })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
   }
 }
 
@@ -758,9 +762,7 @@ registerSetting<number>({
       onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({
-      layers: [h3Layer],
-    })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
   },
 })
 
@@ -803,9 +805,7 @@ registerSetting<boolean>({
       onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({
-      layers: [h3Layer],
-    })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
   },
 })
 
@@ -830,9 +830,7 @@ registerSetting<string>({
       onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({
-      layers: [h3Layer],
-    })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     updateLegend(colourByWeights)
   },
 })
@@ -855,9 +853,7 @@ registerSetting<boolean>({
       onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({
-      layers: [h3Layer],
-    })
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     // updateLegend(colourByWeights) // todo: fix
   },
 })
