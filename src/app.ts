@@ -57,6 +57,7 @@ const colourSchemes = Object.keys(d3s).filter(k => k.startsWith('interpolate') &
 const _csParam = new URLSearchParams(window.location.search).get('cs')
 let currentColourScheme: string = colourSchemes.includes(_csParam ?? '') ? _csParam! : 'interpolateSpectral'
 let colourInverted = new URLSearchParams(window.location.search).get('ci') == '1'
+let useClickhouse = new URLSearchParams(window.location.search).get('ch') == '1'
 const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
 
 // Populate colour scheme dropdown (after Shoelace loads)
@@ -115,12 +116,12 @@ async function chQuery(query: string): Promise<Response> {
 }
 
 const urlParams = new URLSearchParams(window.location.search)
-let RESOLUTION_MODIFIER = (urlParams.has('res') ? Number(urlParams.get('res')) : 0 ) + (IS_MOBILE ? -1 : 0)
+let RESOLUTION_MODIFIER = (urlParams.has('res') ? Number(urlParams.get('res')) : 0 )
 let accumulateCities = urlParams.has('acc') && urlParams.get('acc') !== '0' && urlParams.get('acc') !== 'false'
 let colourByWeights = urlParams.has('w') && urlParams.get('w') !== '0' && urlParams.get('w') !== 'false'
 const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: { h3Index: string; resolution: number }) => {
   const query = `
-      select h3ToParent(h3, least(${resolution + 2 + (IS_MOBILE ? 0 : 1) + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
+      select h3ToParent(h3, least(${resolution + 2 + RESOLUTION_MODIFIER}, h3GetResolution(h3))) index,
       sum(population)/(h3CellAreaM2(index)/(1000*1000)) _value,
       if(_value = 0, 0, 
           round(_value * pow(10, 3 - 1 - floor(log10(abs(_value))))) 
@@ -133,6 +134,7 @@ const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: 
   `
   return chQuery(query)
 })
+const chquerygen = memoise(_chquerygen)
 
 // we need a row-less arrow file that has the right schema. so let's ask clickhouse nicely
 // 1) use ch endpoint
@@ -147,7 +149,7 @@ const emptyArrow = async () => (await EMPTY_PROMISE).clone()
 // build with ../scripts/make_bloom.js
 const TILE_FILTER_PROMISE = fetch(`${static_endpoint}bloom.json`).then(r => r.json()).then(r => BloomFilter.fromJSON(r))
 
-function __chquerygen(_resolution_modifier: number) {
+function _staticquerygen(_resolution_modifier: number) {
   return async ({ h3Index }: { h3Index: string; resolution: number }) => {
     const filter = await TILE_FILTER_PROMISE
     if (!filter.test(h3Index)) {
@@ -163,7 +165,7 @@ function __chquerygen(_resolution_modifier: number) {
     return response
   }
 }
-const chquerygen = memoise(__chquerygen)
+const staticquerygen = memoise(_staticquerygen)
 
 // ---- Legend ----
 let legendElement: SVGSVGElement | null = null
@@ -243,18 +245,7 @@ function updateLegend(colourByWeights: boolean) {
   }, 1337)
 
   // Force re-render of hex layers
-  h3Layer = new ArrowH3TileLayer({
-    id: 'H3TileLayer',
-    // @ts-expect-error custom data function and layer type
-    data: chquerygen(RESOLUTION_MODIFIER),
-    resBias: RESOLUTION_MODIFIER,
-    maxZoom: 8,
-    pickable: true,
-    getFillColor: getColour(getQuantile),
-    colorDomain: [0, 1],
-    // onDataChange: throttledUpdateLegend(colourByWeights),
-    loader: LOADER,
-  })
+  h3Layer = genTileLayer()
   mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
 }
 
@@ -280,18 +271,18 @@ let cumulativeHighlightDt: any = null
 
 const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db', '#00ced1', '#ffd700']
 
-let h3Layer = new ArrowH3TileLayer({
+const genTileLayer = () => new ArrowH3TileLayer({
   id: 'H3TileLayer',
   // @ts-expect-error custom data function and layer type
-  data: chquerygen(RESOLUTION_MODIFIER),
-  resBias: RESOLUTION_MODIFIER,
+  data: useClickhouse ? chquerygen(RESOLUTION_MODIFIER + 1) : staticquerygen(RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0)),
+  resBias: useClickhouse ? -2 : RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0),
   maxZoom: 8,
   pickable: true,
   getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
-  // onDataChange: throttledUpdateLegend(colourByWeights),
   loader: LOADER,
 })
+let h3Layer = genTileLayer()
 
 // Capture shift state at mousedown time (before keyup can interfere)
 let clickShiftState = false
@@ -802,25 +793,15 @@ function readSettingFromElement(el: HTMLElement, spec: SettingSpec<any>): any {
   return (el as any).value
 }
 
+
 registerSetting<number>({
   param: 'res',
   default: 0,
   parse: (raw) => raw !== null ? Number(raw) : 0,
   serialize: (v) => String(v),
   onChange: (value) => {
-    RESOLUTION_MODIFIER = value + (IS_MOBILE ? -1 : 0)
-    h3Layer = new ArrowH3TileLayer({
-      id: 'H3TileLayer',
-      // @ts-expect-error custom data function and layer type
-      data: chquerygen(RESOLUTION_MODIFIER),
-      resBias: RESOLUTION_MODIFIER,
-      maxZoom: 8,
-      pickable: true,
-      getFillColor: getColour(getQuantile!),
-      colorDomain: [0, 1],
-      // onDataChange: throttledUpdateLegend(colourByWeights),
-      loader: LOADER,
-    })
+    RESOLUTION_MODIFIER = value
+    h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [] })
     setTimeout(() => mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] }), 100)
   },
@@ -854,18 +835,7 @@ registerSetting<boolean>({
   serialize: (v) => v ? '1' : '0',
   onChange: (value) => {
     colourByWeights = value
-    h3Layer = new ArrowH3TileLayer({
-      id: 'H3TileLayer',
-      // @ts-expect-error custom data function and layer type
-      data: chquerygen(RESOLUTION_MODIFIER),
-      resBias: RESOLUTION_MODIFIER,
-      maxZoom: 8,
-      pickable: true,
-      getFillColor: getColour(getQuantile!),
-      colorDomain: [0, 1],
-      // onDataChange: throttledUpdateLegend(colourByWeights),
-      loader: LOADER,
-    })
+    h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     setTimeout(() => updateLegend(colourByWeights), 500)
   },
@@ -882,18 +852,7 @@ registerSetting<string>({
   onChange: (value) => {
     currentColourScheme = value
     colourRamp.interpolator((d3s as any)[value])
-    h3Layer = new ArrowH3TileLayer({
-      id: 'H3TileLayer',
-      // @ts-expect-error custom data function and layer type
-      data: chquerygen(RESOLUTION_MODIFIER),
-      resBias: RESOLUTION_MODIFIER,
-      maxZoom: 8,
-      pickable: true,
-      getFillColor: getColour(getQuantile!),
-      colorDomain: [0, 1],
-      // onDataChange: throttledUpdateLegend(colourByWeights),
-      loader: LOADER,
-    })
+    h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     setTimeout(() => updateLegend(colourByWeights), 500)
   },
@@ -907,18 +866,20 @@ registerSetting<boolean>({
   onChange: (value) => {
     colourInverted = value
     colourRamp.domain(value ? [1, 0] : [0, 1])
-    h3Layer = new ArrowH3TileLayer({
-      id: 'H3TileLayer',
-      // @ts-expect-error custom data function and layer type
-      data: chquerygen(RESOLUTION_MODIFIER),
-      resBias: RESOLUTION_MODIFIER,
-      maxZoom: 8,
-      pickable: true,
-      getFillColor: getColour(getQuantile!),
-      colorDomain: [0, 1],
-      // onDataChange: throttledUpdateLegend(colourByWeights),
-      loader: LOADER,
-    })
+    h3Layer = genTileLayer()
+    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+    setTimeout(() => updateLegend(colourByWeights), 500)
+  },
+})
+
+registerSetting<boolean>({
+  param: 'ch',
+  default: false,
+  parse: (raw) => raw !== null && raw !== '0' && raw !== 'false',
+  serialize: (v) => v ? '1' : '0',
+  onChange: (value) => {
+    useClickhouse = value
+    h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     setTimeout(() => updateLegend(colourByWeights), 500)
   },

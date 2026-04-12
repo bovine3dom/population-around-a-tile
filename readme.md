@@ -2,7 +2,7 @@
 
 <a href="https://o.blanthorn.com/population-around-a-tile/map/">Visit the map here</a>
 
-A 'simple' data vis tool using MapLibre GL and deck.gl to display a pre-computed population hex grid itself tiled by hexes and served from a bog-standard HTTP server, with a quantile-based legend that updates as you move.
+A 'simple' data vis tool using MapLibre GL and deck.gl to display a pre-computed population hex grid itself tiled by hexes and served from a bog-standard HTTP server, or optionally from ClickHouse, with a quantile-based legend that updates as you move.
 
 <p align="center">
 <video src="https://github.com/user-attachments/assets/6950d10d-1d51-4414-bc1e-9d1124f519da">demo video covering jumping to cities, getting population graphs, changing colour scheme etc</video>
