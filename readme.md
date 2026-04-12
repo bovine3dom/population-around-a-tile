@@ -2,21 +2,21 @@
 
 https://o.blanthorn.com/population-around-a-tile/map/
 
-A 'simple' data vis tool using MapLibre GL and deck.gl to display a pre-computed population hex grid itself tiled by hexes and served from a bog-standard HTTP server.
+A 'simple' data vis tool using MapLibre GL and deck.gl to display a pre-computed population hex grid itself tiled by hexes and served from a bog-standard HTTP server, with a quantile-based legend that updates as you move.
 
 <p align="center">
-<img src="promo/demo.png" alt="An astonishingly beautiful map Nice coloured by population density, with the central area highlighted and details of the population density displayed (it's about 12k/km2)">
+<video src="https://github.com/user-attachments/assets/6950d10d-1d51-4414-bc1e-9d1124f519da">demo video covering jumping to cities, getting population graphs, changing colour scheme etc</video>
 </p>
 
 # How to run
 
-Prerequisites: yarn. A web browser
+Prerequisites: bun. A web browser. A couple of gigs of space (sticking it on a partition with full disk compression is highly recommended)
 
-0. `git clone`
-1. `yarn install`
-2. `yarn serve&; yarn watch`, open localhost:1983
+0. `git clone` - this might take a while as there are 500k files
+1. `bun install`
+2. `bun serve&; bun watch`, open localhost:1983
 
-If you have updated src/app.js, remember to run `yarn build` and commit map/src.js or GitHub pages won't commit anything.
+If you have updated src/app.ts, remember to run `bun build` and commit map/src.js or GitHub pages won't update anything.
 
 
 # h3 tile layer
@@ -25,14 +25,10 @@ somehow foursquare managed to trademark 'hex tiles', absolutely insane. i wonder
 
 anyway need to formalise the format spec etc.
 
-at the moment it's /res={res}/h3_parent={string_index}/part0.arrow, where h3_parent is the resolution specified, and part0.arrow is an uncompressed arrow file of index: uint64, value: float 0-1.
+at the moment it's /tile_id={string_index}/part0.arrow, where part0.arrow is an uncompressed arrow file of index: uint64, value: float 0-1, optional weight: float 0-1, and all index values are of the same h3 resolution and are less than or equal to the resolution of the string_index
+
+because there are so many files, but some tiles are missing, we use a bloom filter to reduce the number of 404s. you can update it by running `bun scripts/make_bloom.js`
 
 todo:
 
-- extract to a library
-- make getFillColor etc configurable
-- support template string for url
-- add meta.json for valid resolutions rather than hardcoding odd ones? maybe we can/should adapt map style.json?
-- investigate 'z-fighting' glitches when moving
-
-- make layers clickable again
+- extract tile layer to a library?
