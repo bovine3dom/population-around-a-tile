@@ -783,7 +783,8 @@ registerSetting<number>({
       // onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
-    mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+    mapOverlay.setProps({ layers: [] })
+    setTimeout(() => mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] }), 100)
   },
 })
 
