@@ -991,6 +991,7 @@ if (citySearchEl) {
   })
 
   citySearchEl.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === ' ') e.stopPropagation() // give space back
     if (e.key === 'Enter') {
       const results = searchCities(citySearchEl.value)
       if (results.length > 0) {
