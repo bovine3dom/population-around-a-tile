@@ -143,34 +143,36 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       }
       return hasWeights ? { values, weights } : { values }
     }
-    // Reservoir sampling
-    const values: number[] = new Array(maxSamples)
-    const weights: number[] = hasWeights ? new Array(maxSamples) : []
-    let n = 0
+    const sorted_indices = new Int32Array(maxSamples)
+    for (let i = 0; i < maxSamples; i++) {
+      sorted_indices[i] = Math.floor(Math.random() * total)
+    }
+    sorted_indices.sort()
+    const values: number[] = new Array(sorted_indices.length)
+    const weights: number[] = hasWeights ? new Array(sorted_indices.length) : []
+    let global_index = 0
+    let sample_index = 0
     for (const tile of filteredTiles) {
-      const tileData = tile.content
-      const tileValues = getCol(tileData, 'value')
-      const tileWeights = hasWeights ? getCol(tileData, 'weight') : null
-      const numRows = getNumRows(tileData)
+      const numRows = getNumRows(tile.content)
+      if (sample_index >= sorted_indices.length || global_index + numRows <= sorted_indices[sample_index]) {
+        global_index += numRows
+        continue
+      }
+      const tileValues = getCol(tile.content, 'value')
+      const tileWeights = hasWeights ? getCol(tile.content, 'weight') : null
       for (let i = 0; i < numRows; i++) {
-        n++
-        const valRaw = tileValues.at(i)
-        const weightRaw = tileWeights?.at(i)
-        if (valRaw === undefined) continue
-        const val = Number(valRaw)
-        const weight = weightRaw !== undefined ? Number(weightRaw) : 1
-
-        if (n <= maxSamples) {
-          values[n - 1] = val
-          if (hasWeights) weights[n - 1] = weight
-        } else {
-          const j = Math.floor(Math.random() * n)
-          if (j < maxSamples) {
-            values[j] = val
-            if (hasWeights) weights[j] = weight
+        while (sample_index < sorted_indices.length && (global_index + i) === sorted_indices[sample_index]) {
+          const valRaw = tileValues.at(i)
+          if (valRaw !== undefined) {
+            values[sample_index] = Number(valRaw)
+            if (hasWeights && tileWeights) {
+              weights[sample_index] = Number(tileWeights.at(i) ?? 1)
+            }
           }
+          sample_index++
         }
       }
+        global_index += numRows
     }
     return hasWeights ? { values, weights } : { values }
   }
