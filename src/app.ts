@@ -20,6 +20,13 @@ const ch_endpoint = "https://compute.olie.science/ch";
 
 const IS_MOBILE = navigator.userAgent.includes("Mobi")
 
+const ensureMapLoaded = (map: maplibregl.Map) => {
+  return new Promise<void>((resolve) => {
+    if (map.isStyleLoaded()) resolve()
+    else map.once('idle', () => resolve())
+  })
+}
+
 interface StartPos {
   x: number
   y: number
@@ -172,6 +179,7 @@ function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: numb
   return { getQuantile, getValueFromQuantile }
 }
 
+let legendUpdateTimer: ReturnType<typeof setTimeout> | null = null
 function updateLegend(colourByWeights: boolean) {
   const { values, weights } = h3Layer.getSampleValuesAndWeights(1_000)
   if (values.length === 0) return
@@ -183,18 +191,23 @@ function updateLegend(colourByWeights: boolean) {
   getQuantile = ecdf.getQuantile
   getValueFromQuantile = ecdf.getValueFromQuantile
 
-  // Re-render legend with quantile-based ticks
-  const tickFormat = (v: number) => {
-    const rawValue = ecdf.getValueFromQuantile(v)
-    const rounded = parseFloat(rawValue.toPrecision(2))
-    return rounded.toLocaleString()
+  if (legendUpdateTimer) {
+    clearTimeout(legendUpdateTimer)
   }
+  legendUpdateTimer = setTimeout(() => {
+    // Re-render legend with quantile-based ticks
+    const tickFormat = (v: number) => {
+      const rawValue = ecdf.getValueFromQuantile(v)
+      const rounded = parseFloat(rawValue.toPrecision(2))
+      return rounded.toLocaleString()
+    }
 
-  if (legendElement) {
-    legendElement.remove()
-  }
-  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km²', tickFormat })
-  attributionEl.insertBefore(legendElement, attributionEl.firstChild)
+    if (legendElement) {
+      legendElement.remove()
+    }
+    legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km²', tickFormat })
+    attributionEl.insertBefore(legendElement, attributionEl.firstChild)
+  }, 1337)
 
   // Force re-render of hex layers
   h3Layer = new ArrowH3TileLayer({
@@ -204,7 +217,7 @@ function updateLegend(colourByWeights: boolean) {
     pickable: true,
     getFillColor: getColour(getQuantile),
     colorDomain: [0, 1],
-    onDataChange: throttledUpdateLegend(colourByWeights),
+    // onDataChange: throttledUpdateLegend(colourByWeights),
     loader: LOADER,
   })
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
@@ -240,7 +253,7 @@ let h3Layer = new ArrowH3TileLayer({
   pickable: true,
   getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
-  onDataChange: throttledUpdateLegend(colourByWeights),
+  // onDataChange: throttledUpdateLegend(colourByWeights),
   loader: LOADER,
 })
 
@@ -767,7 +780,7 @@ registerSetting<number>({
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
-      onDataChange: throttledUpdateLegend(colourByWeights),
+      // onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
@@ -802,7 +815,6 @@ registerSetting<boolean>({
   serialize: (v) => v ? '1' : '0',
   onChange: (value) => {
     colourByWeights = value
-    updateLegend(colourByWeights)
     h3Layer = new ArrowH3TileLayer({
       id: 'H3TileLayer',
       // @ts-expect-error custom data function and layer type
@@ -810,10 +822,11 @@ registerSetting<boolean>({
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
-      onDataChange: throttledUpdateLegend(colourByWeights),
+      // onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+    setTimeout(() => updateLegend(colourByWeights), 500)
   },
 })
 
@@ -835,11 +848,11 @@ registerSetting<string>({
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
-      onDataChange: throttledUpdateLegend(colourByWeights),
+      // onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
-    updateLegend(colourByWeights)
+    setTimeout(() => updateLegend(colourByWeights), 500)
   },
 })
 
@@ -858,11 +871,11 @@ registerSetting<boolean>({
       pickable: true,
       getFillColor: getColour(getQuantile!),
       colorDomain: [0, 1],
-      onDataChange: throttledUpdateLegend(colourByWeights),
+      // onDataChange: throttledUpdateLegend(colourByWeights),
       loader: LOADER,
     })
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
-    // updateLegend(colourByWeights) // todo: fix
+    setTimeout(() => updateLegend(colourByWeights), 500)
   },
 })
 
@@ -991,7 +1004,10 @@ map.on('moveend', () => {
   const pos = map.getCenter()
   const z = map.getZoom()
   history.replaceState(null, '', `#x=${pos.lng.toFixed(4)}&y=${pos.lat.toFixed(4)}&z=${z.toFixed(4)}`)
+  throttledUpdateLegend(colourByWeights)()
 })
+
+ensureMapLoaded(map).then(throttledUpdateLegend(colourByWeights))
 
 // ---- Favicon ----
 const setFavicon = () => {
