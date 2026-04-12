@@ -59,6 +59,7 @@ const _csParam = new URLSearchParams(window.location.search).get('cs')
 let currentColourScheme: string = colourSchemes.includes(_csParam ?? '') ? _csParam! : 'interpolateSpectral'
 let colourInverted = new URLSearchParams(window.location.search).get('ci') == '1'
 let useClickhouse = new URLSearchParams(window.location.search).get('ch') == '1'
+let freezeLegend = new URLSearchParams(window.location.search).get('freeze') == '1'
 const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
 
 // Populate colour scheme dropdown (after Shoelace loads)
@@ -889,6 +890,19 @@ registerSetting<boolean>({
   },
 })
 
+registerSetting<boolean>({
+  param: 'freeze',
+  default: false,
+  parse: (raw) => raw !== null && raw !== '0' && raw !== 'false',
+  serialize: (v) => v ? '1' : '0',
+  onChange: (value) => {
+    freezeLegend = value
+    h3Layer = genTileLayer()
+    !freezeLegend && mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
+    !freezeLegend && setTimeout(() => updateLegend(colourByWeights), 500)
+  },
+})
+
 // ---- Attribution ----
 const params = new URLSearchParams(window.location.search)
 attributionEl.innerText =
@@ -1015,7 +1029,7 @@ map.on('moveend', () => {
   const pos = map.getCenter()
   const z = map.getZoom()
   history.replaceState(null, '', `#x=${pos.lng.toFixed(4)}&y=${pos.lat.toFixed(4)}&z=${z.toFixed(4)}`)
-  throttledUpdateLegend(colourByWeights)()
+  !freezeLegend && throttledUpdateLegend(colourByWeights)()
 })
 
 ensureMapLoaded(map).then(throttledUpdateLegend(colourByWeights))
