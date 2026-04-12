@@ -822,7 +822,7 @@ registerSetting<number>({
       loader: LOADER,
     })
     mapOverlay.setProps({ layers: [] })
-    setTimeout(() => mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] }), 0)
+    setTimeout(() => mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] }), 100)
   },
 })
 
