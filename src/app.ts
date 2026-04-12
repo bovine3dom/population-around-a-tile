@@ -13,6 +13,7 @@ import { ArrowH3TileLayer, getCol } from './ArrowH3TileLayer'
 import { D3LineChart } from './d3-line-chart'
 import { human } from './format'
 import { findClosestCity } from './tiny-cities'
+import { Sampler } from './random'
 import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
 ;(window as any).h3 = h3
@@ -189,13 +190,19 @@ const _throttledUpdateLegend = (colourByWeights: boolean) => () => {
 }
 const throttledUpdateLegend = memoise(_throttledUpdateLegend)
 
-function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
-  const sampleSize = Math.min(256, values.length)
-  const indices = Array.from({ length: sampleSize }, () => Math.floor(Math.random() * values.length))
-  const pairs = indices.map(i => [values[i], weights ? weights[i] : 1] as [number, number])
-  pairs.sort((a, b) => a[0] - b[0])
-  const sortedValues = pairs.map(([v]) => v)
-  const sortedWeights = pairs.map(([, w]) => w)
+function buildEcdf(sampler: Sampler, useWeights: boolean = true): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
+  const sampleSize = Math.min(256, sampler.totalRows)
+  const pairs: [number, number][] = [];
+  for (let i = 0; i < sampleSize; i++) {
+    const randomIdx = Math.floor(Math.random() * sampler.totalRows);
+    pairs.push([sampler.get(randomIdx, 'value'), (useWeights ? sampler.get(randomIdx, 'weight') : 1) ?? 1]);
+  }
+
+  pairs.sort((a, b) => a[0] - b[0]);
+  
+  const sortedValues = pairs.map(([v]) => v);
+  const sortedWeights = pairs.map(([, w]) => w);
+
   let cumW = 0
   const totalW = sortedWeights.reduce((s, w) => s + w, 0)
   const quantiles = sortedWeights.map(w => { cumW += w; return cumW / totalW })
@@ -216,13 +223,10 @@ function buildEcdf(values: number[], weights: number[]): { getQuantile: (v: numb
 
 let legendUpdateTimer: ReturnType<typeof setTimeout> | null = null
 function updateLegend(colourByWeights: boolean) {
-  const { values, weights } = h3Layer.getSampleValuesAndWeights(1_000)
-  if (values.length === 0) return
-
-  const effectiveWeights = colourByWeights && weights && weights.length === values.length ? weights : new Array(values.length).fill(1)
-
   // Build ECDF
-  const ecdf = buildEcdf(values, effectiveWeights)
+  const sampler = h3Layer.getSampler()
+  if (!sampler) return
+  const ecdf = buildEcdf(sampler, colourByWeights)
   getQuantile = ecdf.getQuantile
   getValueFromQuantile = ecdf.getValueFromQuantile
 

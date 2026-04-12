@@ -6,6 +6,7 @@ import { ParquetWasmLoader } from '@loaders.gl/parquet'
 import type { ColumnarTable } from '@loaders.gl/schema'
 import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
+import { Sampler } from './random'
 const PARQUET_WASM_URL = "./parquet_wasm_bg.wasm"
 
 export type ArrowColumnarData = {
@@ -66,36 +67,11 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     }
   }
 
-  // Collect all loaded values
-  getAllValues(): number[] {
-    const values: number[] = []
-    for (const tileData of tileCache.values()) {
-      const vCol = getCol(tileData, 'value')
-      const numRows = getNumRows(tileData)
-      for (let i = 0; i < numRows; i++) {
-        const val = vCol.at(i)
-        if (val !== undefined) values.push(Number(val))
-      }
-    }
-    return values
-  }
-
-  // Sample values for quantile computation from currently VISIBLE tiles at the dominant resolution
-  getSampleValues(maxSamples: number = 100_000): number[] {
-    const { values } = this.getSampleValuesAndWeights(maxSamples)
-    return values
-  }
-
-  // Sample values and optional weights for weighted quantile computation
-  getSampleValuesAndWeights(maxSamples: number = 100_000): { values: number[]; weights?: number[] } {
+  getSampler(): Sampler | null {
     const tileset = this?.state?.tileset
-    if (!tileset) return { values: [] }
-
-    // Only sample from tiles that are currently visible in the viewport
-    const visibleTiles = tileset.tiles.filter((t: any) => t.isVisible && t.content)
-    if (visibleTiles.length === 0) return { values: [] }
-
-    // Find the dominant resolution among visible tiles
+    if (!tileset) return null
+    const visibleTiles = tileset.tiles.filter((t: any) => t.isVisible && t.content);
+    if (visibleTiles.length === 0) return null;
     const resCounts = new Map<number, number>()
     for (const tile of visibleTiles) {
       const tileData = tile.content
@@ -116,8 +92,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
         dominantRes = res
       }
     }
-
-    // Filter to only the dominant resolution
+    
     const filteredTiles = visibleTiles.filter((t: any) => {
       const indices = getCol(t.content, 'index')
       const raw = indices?.at(0)
@@ -127,64 +102,25 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       return res === dominantRes
     })
 
-    let total = 0
+    let totalRows = 0;
+    const tileOffsets: number[] = [];
     for (const tile of filteredTiles) {
-      total += getNumRows(tile.content)
+      tileOffsets.push(totalRows);
+      totalRows += getNumRows(tile.content);
     }
 
-    // Check if weight column exists
-    const hasWeights = filteredTiles.length > 0 && getCol(filteredTiles[0].content, 'weight') !== undefined
-
-    if (total <= maxSamples) {
-      const values: number[] = []
-      const weights: number[] = []
-      for (const tile of filteredTiles) {
-        const valCol = getCol(tile.content, 'value')
-        const weightCol = hasWeights ? getCol(tile.content, 'weight') : null
-        const numRows = getNumRows(tile.content)
-        for (let i = 0; i < numRows; i++) {
-          const val = valCol.at(i)
-          if (val !== undefined) values.push(Number(val))
-          if (hasWeights && weightCol) {
-            const w = weightCol.at(i)
-            if (w !== undefined) weights.push(Number(w))
-          }
-        }
-      }
-      return hasWeights ? { values, weights } : { values }
-    }
-    const sorted_indices = new Int32Array(maxSamples)
-    for (let i = 0; i < maxSamples; i++) {
-      sorted_indices[i] = Math.floor(Math.random() * total)
-    }
-    sorted_indices.sort()
-    const values: number[] = new Array(sorted_indices.length)
-    const weights: number[] = hasWeights ? new Array(sorted_indices.length) : []
-    let global_index = 0
-    let sample_index = 0
-    for (const tile of filteredTiles) {
-      const numRows = getNumRows(tile.content)
-      if (sample_index >= sorted_indices.length || global_index + numRows <= sorted_indices[sample_index]) {
-        global_index += numRows
-        continue
-      }
-      const tileValues = getCol(tile.content, 'value')
-      const tileWeights = hasWeights ? getCol(tile.content, 'weight') : null
-      for (let i = 0; i < numRows; i++) {
-        while (sample_index < sorted_indices.length && (global_index + i) === sorted_indices[sample_index]) {
-          const valRaw = tileValues.at(i)
-          if (valRaw !== undefined) {
-            values[sample_index] = Number(valRaw)
-            if (hasWeights && tileWeights) {
-              weights[sample_index] = Number(tileWeights.at(i) ?? 1)
-            }
-          }
-          sample_index++
-        }
-      }
-        global_index += numRows
-    }
-    return hasWeights ? { values, weights } : { values }
+    return {
+      totalRows,
+      get: (idx: number, field: string) => {
+        const tileIdx = tileOffsets.findIndex((o, i) => 
+          (tileOffsets[i+1] ?? totalRows) > idx
+        )
+        
+        const tile = filteredTiles[tileIdx];
+        const localIdx = idx - tileOffsets[tileIdx];
+        return Number(getCol(tile.content, field)[localIdx]);
+      },
+    };
   }
 
   // Find all rows matching cells in a gridDisk around an h3 index
