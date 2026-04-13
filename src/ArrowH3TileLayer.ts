@@ -161,9 +161,10 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
   // @ts-expect-error TileLoadProps uses TileIndex but we use H3TileIndex
   async getTileData(tile: { index: H3TileIndex }): Promise<ArrowColumnarData> {
     const h3Index = tile.index.i
-    const resolution = h3.getResolution(tile.index.i)
+    // const resolution = h3.getResolution(tile.index.i)
     const { data: dataGen, loader } = this.props as unknown as ArrowH3TileLayerProps
-    const response = await dataGen({ h3Index, resolution })
+    // const response = await dataGen({ h3Index, resolution })
+    return dataGen(h3Index)
 
     // const data = await load(response, loader === 'parquet' ? ParquetWasmLoader : ArrowLoader, {
     //   parquet: { wasmUrl: PARQUET_WASM_URL },

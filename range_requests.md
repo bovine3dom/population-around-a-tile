@@ -76,3 +76,47 @@ convert-arrow-schema.js:196 Uncaught Error: arrow type not supported: Int_2
 ```
 
 we could just reimplement the bit of the schema that we need...
+
+as always it was just bloody node_modules being haunted. it works fine now
+
+```
+convertArrowToTable(await (await dbp).query("select 1"), 'arrow-table')
+```
+
+
+
+ok we have this working now and as suspected it is _way_ slower than just using files
+
+notes for making the parquet file:
+
+```
+# single file with row groups for range requests
+using Arrow, DataFrames
+import H3, Tables
+df4 = Arrow.Table("kontur_population/kontur_population_20231101.arrow") |> DataFrame
+
+kontur_res = H3.API.getResolution(df4.h3[1])
+inner_tile_diff = 3
+df_batches = DataFrame(tile_id=UInt64[], index=UInt64[], value=Float64[], weight=Float64[])#, res=UInt8[])
+for tile_res in 0:(kontur_res-inner_tile_diff)
+# for tile_res in 0:2
+    @show "doing tile_res=$tile_res"
+    target_res = tile_res + inner_tile_diff
+    df4.index = H3.API.cellToParent.(df4.h3, target_res)
+    df_t = combine(groupby(df4, :index), :population => sum => :weight)
+    df_t.value = round.(df_t.weight ./ H3.API.cellAreaKm2.(df_t.index), sigdigits=3)
+    df_t.tile_id = H3.API.cellToParent.(df_t.index, tile_res)
+    append!(df_batches, df_t[!, [:tile_id, :index, :value, :weight]])
+end
+# g = groupby(df_batches, :tile_id)
+# # write a stream rather than file format
+# open("kontur_batched3.arrow", "w") do io
+#     Arrow.write(io, Tables.partitioner(g))
+# end
+
+# ... eugh but then it has to stream the whole bloody thing?
+import QuackIO
+sort!(df_batches, :tile_id)
+QuackIO.write_table("kontur_batched3.parquet", df_batches)
+# this works fine
+```

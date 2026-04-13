@@ -281,7 +281,8 @@ const COLORS = ['#ff69b4', '#ffa500', '#41c6ff', '#7cfc00', '#ff4500', '#9370db'
 const genTileLayer = () => new ArrowH3TileLayer({
   id: 'H3TileLayer',
   // @ts-expect-error custom data function and layer type
-  data: useClickhouse ? chquerygen(RESOLUTION_MODIFIER + 1) : staticquerygen(RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0)),
+  // data: useClickhouse ? chquerygen(RESOLUTION_MODIFIER + 1) : staticquerygen(RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0)),
+  data: duckdbquery,
   resBias: useClickhouse ? -2 : RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0),
   maxZoom: 8,
   pickable: true,
@@ -1058,7 +1059,7 @@ export async function getLocalDB() {
   };
 
   const worker = await duckdb.createWorker(bundle.mainWorker);
-  const logger = new duckdb.ConsoleLogger(); // this is a bit spammy
+  const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING); // change to info to debug thingies
   const db = new duckdb.AsyncDuckDB(logger, worker);
   
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
@@ -1066,21 +1067,20 @@ export async function getLocalDB() {
   return db;
 }
 
-let db: any = null
-let dbp = getLocalDB().then(db2 => db2.connect()).then(db2 => {
+let db = getLocalDB().then(db2 => db2.connect()).then(async db2 => {
   ;(window as any).db = db2
   db = db2
-  db.query(`
+  await db.query(`
    install httpfs; -- side-effectily allow range requests
    load httpfs;
-  `).then(console.log)
+  `)
   return db
 })
-;(window as any).dbp = dbp;
+;(window as any).db = db;
 
 async function fq(query: string) {
-  await dbp;
-  dbp.query(query).then((r: any) => r.toArray().map((r: any) => r.toJSON())).then((x: any) => console.table(x))
+  await db;
+  db.query(query).then((r: any) => r.toArray().map((r: any) => r.toJSON())).then((x: any) => console.table(x))
 }
 ;(window as any).fq = fq
 
@@ -1091,3 +1091,7 @@ import { load } from '@loaders.gl/core'
 // import { ArrowLoader } from '@loaders.gl/arrow'
 ;(window as any).load = load
 // ;(window as any).ArrowLoader = ArrowLoader
+
+async function duckdbquery(h3Index: string) {
+  return convertArrowToTable(await (await db).query(`select * from 'http://localhost:1980/kontur_batched3.parquet' where tile_id = '0x${h3Index}'`), 'columnar-table')
+}
