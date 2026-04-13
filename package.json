@@ -5,29 +5,28 @@
         "build": "bun build --minify --bundle --outdir=map src/app.ts",
         "watch": "bun build --watch --sourcemap=linked --bundle --outdir=map src/app.ts",
         "serve": "http-server map -p 1983 -c-1",
-        "postinstall": "cp node_modules/@loaders.gl/parquet/dist/parquet_wasm_bg.wasm map/",
+        "postinstall": "cp node_modules/@loaders.gl/parquet/dist/parquet_wasm_bg.wasm map/; cp -r node_modules/@duckdb/duckdb-wasm/dist map/duckdb",
         "make-bloom": "bun scripts/make_bloom.js",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@loaders.gl/arrow": "^4.4.1",
-        "@loaders.gl/parquet": "4.3.4",
+        "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
         "@types/geokdbush": "^1.1.5",
         "arquero": "^5.4.1",
         "bloomfilter": "^1.1.0",
         "d3": "^7.9.0",
         "d3-dsv": "^3.0.1",
         "d3-scale-chromatic": "^3.1.0",
-        "deck.gl": "^9.0.14",
-        "geokdbush": "^2.0.1",
-        "h3-js": "^4.1.0",
+        "deck.gl": "^9.2.11",
+        "geokdbush": "^2.1.0",
+        "h3-js": "^4.4.0",
         "http-server": "^14.1.1",
         "kdbush": "^4.0.2",
-        "maplibre-gl": "^3.0.0"
+        "maplibre-gl": "^3.6.2"
     },
     "devDependencies": {
         "@types/d3": "^7.4.3",
-        "@types/d3-scale-chromatic": "^3.0.3",
-        "typescript": "^5.4.5"
+        "@types/d3-scale-chromatic": "^3.1.0",
+        "typescript": "^5.9.3"
     }
 }

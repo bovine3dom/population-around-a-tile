@@ -1,8 +1,8 @@
 import { TileLayer, TileLayerProps, _Tile2DHeader as Tile2DHeader } from '@deck.gl/geo-layers'
 import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import { load } from '@loaders.gl/core'
-import { ArrowLoader } from '@loaders.gl/arrow'
-import { ParquetWasmLoader } from '@loaders.gl/parquet'
+// import { ArrowLoader } from '@loaders.gl/arrow'
+// import { ParquetWasmLoader } from '@loaders.gl/parquet'
 import type { ColumnarTable } from '@loaders.gl/schema'
 import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
@@ -165,10 +165,11 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const { data: dataGen, loader } = this.props as unknown as ArrowH3TileLayerProps
     const response = await dataGen({ h3Index, resolution })
 
-    const data = await load(response, loader === 'parquet' ? ParquetWasmLoader : ArrowLoader, {
-      parquet: { wasmUrl: PARQUET_WASM_URL },
-      arrow: { shape: 'columnar-table' },
-    })
+    // const data = await load(response, loader === 'parquet' ? ParquetWasmLoader : ArrowLoader, {
+    //   parquet: { wasmUrl: PARQUET_WASM_URL },
+    //   arrow: { shape: 'columnar-table' },
+    // })
+    return undefined
     return data as ArrowColumnarData
   }
 

@@ -96,13 +96,14 @@ const _getColour = (getQuantile: (v: number) => number) => (v: number): [number,
 }
 const getColour = memoise(_getColour)
 
-const LOADER = 'arrow'
+const LOADER = 'parquet'
 const CACHE_NAME = 'clickhouse-queries-v0.1'
 async function chQuery(query: string): Promise<Response> {
   const req = `${ch_endpoint}/?query=${encodeURIComponent(query + " format arrow settings output_format_arrow_compression_method = 'none'")}`
   const cache = await caches.open(CACHE_NAME)
   const cachedResponse = await cache.match(req)
   if (cachedResponse) {
+    console.log(cachedResponse.clone())
     return cachedResponse
   }
   // return fetch(`${ch_endpoint}/?query=${encodeURIComponent(query + " format parquet")}`, {
@@ -114,6 +115,7 @@ async function chQuery(query: string): Promise<Response> {
   if (response.ok) {
     cache.put(req, response.clone())
   }
+  console.log(response.clone())
   return response
 }
 
@@ -1041,3 +1043,51 @@ const setFavicon = () => {
 }
 setFavicon()
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setFavicon)
+
+
+// duckdb playground
+import * as duckdb from '@duckdb/duckdb-wasm';
+
+export async function getLocalDB() {
+  const tidyurl = window.location.origin + window.location.pathname
+  const bundle = {
+    mainWorker: tidyurl + 'duckdb/duckdb-browser-eh.worker.js',
+    mainModule: tidyurl + 'duckdb/duckdb-eh.wasm',
+    // pthreadWorker: '/duckdb/duckdb-eh.worker.js',
+    pthreadWorker: null,
+  };
+
+  const worker = await duckdb.createWorker(bundle.mainWorker);
+  const logger = new duckdb.ConsoleLogger(); // this is a bit spammy
+  const db = new duckdb.AsyncDuckDB(logger, worker);
+  
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  
+  return db;
+}
+
+let db: any = null
+let dbp = getLocalDB().then(db2 => db2.connect()).then(db2 => {
+  ;(window as any).db = db2
+  db = db2
+  db.query(`
+   install httpfs; -- side-effectily allow range requests
+   load httpfs;
+  `).then(console.log)
+  return db
+})
+;(window as any).dbp = dbp;
+
+async function fq(query: string) {
+  await dbp;
+  dbp.query(query).then((r: any) => r.toArray().map((r: any) => r.toJSON())).then((x: any) => console.table(x))
+}
+;(window as any).fq = fq
+
+import { convertArrowToTable } from '@loaders.gl/schema-utils'
+;(window as any).convertArrowToTable = convertArrowToTable
+
+import { load } from '@loaders.gl/core'
+// import { ArrowLoader } from '@loaders.gl/arrow'
+;(window as any).load = load
+// ;(window as any).ArrowLoader = ArrowLoader
