@@ -23,7 +23,8 @@
         "h3-js": "^4.1.0",
         "http-server": "^14.1.1",
         "kdbush": "^4.0.2",
-        "maplibre-gl": "^3.0.0"
+        "maplibre-gl": "^3.0.0",
+        "tiny-geocoder": "^0.0.1"
     },
     "devDependencies": {
         "@types/d3": "^7.4.3",

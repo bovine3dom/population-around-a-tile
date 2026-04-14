@@ -12,7 +12,7 @@ import * as h3 from 'h3-js'
 import { ArrowH3TileLayer, getCol } from './ArrowH3TileLayer'
 import { D3LineChart } from './d3-line-chart'
 import { human } from './format'
-import { findClosestCity } from './tiny-cities'
+import { findClosestCity, getCitiesStartsWith } from 'tiny-geocoder'
 import { Sampler } from './random'
 import tinyCities from './tiny-cities.json'
 (window as any).findClosestCity = findClosestCity
@@ -498,7 +498,7 @@ function makeHighlight(info: any | undefined, force_radius: number | undefined, 
     }
     const centerLat = h3.cellToLatLng(clickedIndex)[0]
     const centerLon = h3.cellToLatLng(clickedIndex)[1]
-    const cityLabel = findClosestCity(centerLat, centerLon)
+    const cityLabel = findClosestCity(centerLat, centerLon)?.name ?? 'Unknown'
     const centerValue = (dt.get('value', 0) as number)
     console.log(cityLabel)
     console.table(ringStats)
@@ -912,20 +912,7 @@ attributionEl.innerText =
     .join(' © ')
 
 const citySearchEl = document.getElementById('city_search') as any
-const MAX_RESULTS = 10
-
-function searchCities(query: string): Array<{ label: string; lat: number; lon: number }> {
-  if (!query) return []
-  const q = query.toLowerCase()
-  return tinyCities
-    .filter(c => c.name.toLowerCase().startsWith(q) || c.country_code.toLowerCase().startsWith(q))
-    .slice(0, MAX_RESULTS)
-    .map(c => ({
-      label: `${c.name}, ${c.country_code}`,
-      lat: c.latitude,
-      lon: c.longitude,
-    }))
-}
+const MAX_RESULTS = 20
 
 if (citySearchEl) {
   const dropdown = document.createElement('sl-dropdown') as any
@@ -942,7 +929,7 @@ if (citySearchEl) {
   dropdown.appendChild(menu)
 
   function showResults(query: string) {
-    const results = searchCities(query)
+    const results = getCitiesStartsWith(query, MAX_RESULTS, true)
     menu.innerHTML = ''
     if (!results.length) {
       dropdown.hide()
@@ -950,11 +937,11 @@ if (citySearchEl) {
     }
     for (const r of results) {
       const item = document.createElement('sl-menu-item') as any
-      item.textContent = r.label
+      item.textContent = r.name
       item.addEventListener('click', () => {
-        citySearchEl.value = r.label
+        citySearchEl.value = r.name
         dropdown.hide()
-        map.flyTo({ center: [r.lon, r.lat], zoom: 12, duration: 1500 })
+        map.flyTo({ center: [r.longitude!, r.latitude!], zoom: 12, duration: 1500 })
       })
       menu.appendChild(item)
     }
@@ -972,12 +959,12 @@ if (citySearchEl) {
   citySearchEl.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === ' ') e.stopPropagation() // give space back
     if (e.key === 'Enter') {
-      const results = searchCities(citySearchEl.value)
+      const results = getCitiesStartsWith(citySearchEl.value, 1, true)
       if (results.length > 0) {
         const r = results[0]
-        citySearchEl.value = r.label
+        citySearchEl.value = r.name
         dropdown.hide()
-        map.flyTo({ center: [r.lon, r.lat], zoom: 12, duration: 1500 })
+        map.flyTo({ center: [r.longitude!, r.latitude!], zoom: 12, duration: 1500 })
       }
     }
   })
