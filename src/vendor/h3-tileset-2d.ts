@@ -98,7 +98,7 @@ export function getHexagonResolution(
   const latitudeAdjustment = Math.log2(1 / Math.cos(latRad));
   const BIAS = 2; // Default bias
   const exactResolution = h3ScaleFactor * (viewport.zoom - zoomOffset + latitudeAdjustment) - (BIAS - resBias);
-  const MY_MAX_TILE_SIZE = 5 // 15
+  const MY_MAX_TILE_SIZE = 8 // 15
   return Math.max(0, Math.min(MY_MAX_TILE_SIZE, Math.floor(exactResolution))); // i don't like hacking this in here but whatever
 }
 

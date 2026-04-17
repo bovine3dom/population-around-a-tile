@@ -130,7 +130,8 @@ const _chquerygen = (RESOLUTION_MODIFIER: number) => (({ h3Index, resolution }: 
           / pow(10, 3 - 1 - floor(log10(abs(_value))))
       ) AS value,
       sum(population) weight
-      from public_kontur_population_20231101
+      from public_population_england_wales
+      --from public_kontur_population_20231101
       where h3ToParent(h3, ${resolution}) = reinterpretAsUInt64(reverse(unhex('${h3Index}')))
       group by index
   `
