@@ -283,6 +283,7 @@ const genTileLayer = () => new ArrowH3TileLayer({
   resBias: useClickhouse ? -2 : RESOLUTION_MODIFIER + (IS_MOBILE ? -1 : 0),
   maxZoom: 8,
   pickable: true,
+  highPrecision: true,
   getFillColor: getColour(getQuantile!),
   colorDomain: [0, 1],
   loader: LOADER,
