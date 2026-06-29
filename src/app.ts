@@ -221,6 +221,15 @@ const _throttledUpdateLegend = (colourByWeights: boolean) => () => {
   }, 1000)
 }
 const throttledUpdateLegend = memoise(_throttledUpdateLegend)
+let tileDataUpdateTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleTileDataColourUpdate() {
+  if (tileDataUpdateTimer) return
+  tileDataUpdateTimer = setTimeout(() => {
+    tileDataUpdateTimer = null
+    !freezeLegend && throttledUpdateLegend(colourByWeights)()
+  }, 0)
+}
 
 function upperBound(array: number[], target: number) {
   let lo = 0
@@ -342,6 +351,7 @@ const genTileLayer = () => new ArrowH3TileLayer({
   highPrecision: true,
   getFillColor: getColour(getQuantile!),
   colorVersion: colourVersion,
+  onDataChange: scheduleTileDataColourUpdate,
   loader: LOADER,
 })
 let h3Layer = genTileLayer()
@@ -1096,7 +1106,6 @@ map.on('moveend', () => {
   const pos = map.getCenter()
   const z = map.getZoom()
   history.replaceState(null, '', `#x=${pos.lng.toFixed(4)}&y=${pos.lat.toFixed(4)}&z=${z.toFixed(4)}`)
-  !freezeLegend && throttledUpdateLegend(colourByWeights)()
 })
 
 ensureMapLoaded(map).then(throttledUpdateLegend(colourByWeights))
