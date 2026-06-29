@@ -23,6 +23,8 @@ const password = 'a2hkayBzZGlsO2RqIHNsayBsYWpzZCBmbGogc2Rsa2og';
 const ch_endpoint = "https://compute.olie.science/ch";
 
 const IS_MOBILE = navigator.userAgent.includes("Mobi")
+const urlParams = new URLSearchParams(window.location.search)
+const QUANTILE_SAMPLE_SIZE = 8192
 
 const ensureMapLoaded = (map: maplibregl.Map) => {
   return new Promise<void>((resolve) => {
@@ -55,11 +57,11 @@ const map = new maplibregl.Map({
 })
 
 const colourSchemes = Object.keys(d3s).filter(k => k.startsWith('interpolate') && typeof (d3s as any)[k] === 'function')
-const _csParam = new URLSearchParams(window.location.search).get('cs')
+const _csParam = urlParams.get('cs')
 let currentColourScheme: string = colourSchemes.includes(_csParam ?? '') ? _csParam! : 'interpolateSpectral'
-let colourInverted = new URLSearchParams(window.location.search).get('ci') == '1'
-let useClickhouse = new URLSearchParams(window.location.search).get('ch') == '1'
-let freezeLegend = new URLSearchParams(window.location.search).get('freeze') == '1'
+let colourInverted = urlParams.get('ci') === '1'
+let useClickhouse = urlParams.get('ch') === '1'
+let freezeLegend = urlParams.get('freeze') === '1'
 const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
 
 // Populate colour scheme dropdown (after Shoelace loads)
@@ -76,6 +78,25 @@ customElements.whenDefined('sl-select').then(() => {
 })
 let getQuantile: ((v: number) => number) | undefined
 let getValueFromQuantile: ((q: number) => number) | undefined
+let colourVersion = 0
+
+const COLOUR_PALETTE_SIZE = 1024
+let colourPaletteRgba = new Uint8Array(COLOUR_PALETTE_SIZE * 4)
+
+function rebuildColourPalette() {
+  for (let i = 0; i < COLOUR_PALETTE_SIZE; i++) {
+    const colour = d3.rgb(colourRamp(i / (COLOUR_PALETTE_SIZE - 1)))
+    const offset = i * 4
+    colourPaletteRgba[offset] = colour.r
+    colourPaletteRgba[offset + 1] = colour.g
+    colourPaletteRgba[offset + 2] = colour.b
+    colourPaletteRgba[offset + 3] = Math.round((colour.opacity ?? 1) * 255)
+  }
+}
+
+function bumpColourVersion() {
+  colourVersion++
+}
 
 // prevent dumb reactivity on function factories
 function memoise<TArg, TResult>(fn: (arg: TArg) => TResult) {
@@ -88,11 +109,22 @@ function memoise<TArg, TResult>(fn: (arg: TArg) => TResult) {
   }
 }
 
-const _getColour = (getQuantile: (v: number) => number) => (v: number): [number, number, number, number] => {
+rebuildColourPalette()
+
+function writeColourForQuantile(q: number, target: number[] = [0, 0, 0, 255]) {
+  if (!Number.isFinite(q)) q = 0
+  q = Math.min(Math.max(q, 0), 1)
+  const paletteOffset = Math.round(q * (COLOUR_PALETTE_SIZE - 1)) * 4
+  target[0] = colourPaletteRgba[paletteOffset]
+  target[1] = colourPaletteRgba[paletteOffset + 1]
+  target[2] = colourPaletteRgba[paletteOffset + 2]
+  target[3] = colourPaletteRgba[paletteOffset + 3]
+  return target as [number, number, number, number]
+}
+
+const _getColour = (getQuantile: (v: number) => number) => (v: number, target?: number[]): [number, number, number, number] => {
   const q = getQuantile ? getQuantile(v) : 0
-  const c = d3.color(colourRamp(q))!
-  const rgb = c.formatRgb().match(/[\d.]+/g)!.map(Number)
-  return [rgb[0], rgb[1], rgb[2], 255]
+  return writeColourForQuantile(q, target)
 }
 const getColour = memoise(_getColour)
 
@@ -117,7 +149,6 @@ async function chQuery(query: string): Promise<Response> {
   return response
 }
 
-const urlParams = new URLSearchParams(window.location.search)
 let RESOLUTION_MODIFIER = (urlParams.has('res') ? Number(urlParams.get('res')) : 0 )
 let accumulateCities = urlParams.has('acc') && urlParams.get('acc') !== '0' && urlParams.get('acc') !== 'false'
 let colourByWeights = urlParams.has('w') && urlParams.get('w') !== '0' && urlParams.get('w') !== 'false'
@@ -191,8 +222,34 @@ const _throttledUpdateLegend = (colourByWeights: boolean) => () => {
 }
 const throttledUpdateLegend = memoise(_throttledUpdateLegend)
 
+function upperBound(array: number[], target: number) {
+  let lo = 0
+  let hi = array.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (array[mid] > target) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
+function upperBoundClamped(array: number[], target: number, min: number, max: number) {
+  let lo = 0
+  let hi = array.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    const value = Math.min(Math.max(min, array[mid]), max)
+    if (value > target) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
 function buildEcdf(sampler: Sampler, useWeights: boolean = true): { getQuantile: (v: number) => number; getValueFromQuantile: (q: number) => number } {
-  const sampleSize = Math.min(256, sampler.totalRows)
+  const sampleSize = Math.min(QUANTILE_SAMPLE_SIZE, sampler.totalRows)
+  if (sampleSize === 0) {
+    return { getQuantile: () => 0, getValueFromQuantile: () => 0 }
+  }
   const pairs: [number, number][] = [];
   for (let i = 0; i < sampleSize; i++) {
     const randomIdx = Math.floor(Math.random() * sampler.totalRows);
@@ -209,14 +266,12 @@ function buildEcdf(sampler: Sampler, useWeights: boolean = true): { getQuantile:
   const quantiles = sortedWeights.map(w => { cumW += w; return cumW / totalW })
 
   const getQuantile = (target: number): number => {
-    const idx = sortedValues.findIndex(v => v > target)
-    return idx === -1 ? 1 : quantiles[idx]
+    return quantiles[upperBound(sortedValues, target)] ?? 1
   }
 
   const getValueFromQuantile = (target: number): number => {
     const trimTarget = Math.min(Math.max(0.01, target), 0.99)
-    const idx = quantiles.findIndex(q => q > trimTarget)
-    return idx === -1 ? sortedValues[sortedValues.length - 1] : sortedValues[idx]
+    return sortedValues[upperBoundClamped(quantiles, trimTarget, 0.01, 0.99)] ?? sortedValues[sortedValues.length - 1]
   }
 
   return { getQuantile, getValueFromQuantile }
@@ -230,6 +285,7 @@ function updateLegend(colourByWeights: boolean) {
   const ecdf = buildEcdf(sampler, colourByWeights)
   getQuantile = ecdf.getQuantile
   getValueFromQuantile = ecdf.getValueFromQuantile
+  bumpColourVersion()
 
   if (legendUpdateTimer) {
     clearTimeout(legendUpdateTimer)
@@ -285,7 +341,7 @@ const genTileLayer = () => new ArrowH3TileLayer({
   pickable: true,
   highPrecision: true,
   getFillColor: getColour(getQuantile!),
-  colorDomain: [0, 1],
+  colorVersion: colourVersion,
   loader: LOADER,
 })
 let h3Layer = genTileLayer()
@@ -858,6 +914,8 @@ registerSetting<string>({
   onChange: (value) => {
     currentColourScheme = value
     colourRamp.interpolator((d3s as any)[value])
+    rebuildColourPalette()
+    bumpColourVersion()
     h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     setTimeout(() => updateLegend(colourByWeights), 500)
@@ -872,6 +930,8 @@ registerSetting<boolean>({
   onChange: (value) => {
     colourInverted = value
     colourRamp.domain(value ? [1, 0] : [0, 1])
+    rebuildColourPalette()
+    bumpColourVersion()
     h3Layer = genTileLayer()
     mapOverlay.setProps({ layers: [h3Layer, getHighlightData(cumulativeHighlightDt)] })
     setTimeout(() => updateLegend(colourByWeights), 500)

@@ -3,7 +3,6 @@ import { H3HexagonLayer } from '@deck.gl/geo-layers'
 import { load } from '@loaders.gl/core'
 import { ArrowLoader } from '@loaders.gl/arrow'
 import { ParquetWasmLoader } from '@loaders.gl/parquet'
-import type { ColumnarTable } from '@loaders.gl/schema'
 import H3Tileset2D, { type H3TileIndex } from './vendor/h3-tileset-2d'
 import * as h3 from 'h3-js'
 import { Sampler } from './random'
@@ -34,12 +33,56 @@ export function getCol(table: ArrowColumnarData, name: string): any {
   return tableData?.getChild?.(name)
 }
 
+function colAt(column: any, index: number): any {
+  const value = column?.[index]
+  return value !== undefined ? value : column?.at?.(index)
+}
+
+type Rgba = [number, number, number, number] | number[]
+type FillColorFn = (value: number, target?: number[]) => Rgba
+
+const fillColorCache = new WeakMap<ArrowColumnarData, { colorVersion: number; colors: Uint8Array }>()
+const subLayerDataCache = new WeakMap<ArrowColumnarData, any>()
+
+function getCachedFillColors(
+  tileData: ArrowColumnarData,
+  values: any,
+  numRows: number,
+  getFillColor: FillColorFn,
+  colorVersion: number,
+) {
+  const cached = fillColorCache.get(tileData)
+  if (cached?.colorVersion === colorVersion) return cached.colors
+
+  const colors = new Uint8Array(numRows * 4)
+  const target = [0, 0, 0, 255]
+  for (let i = 0; i < numRows; i++) {
+    const colour = getFillColor(Number(colAt(values, i)), target)
+    const offset = i * 4
+    colors[offset] = colour[0]
+    colors[offset + 1] = colour[1]
+    colors[offset + 2] = colour[2]
+    colors[offset + 3] = colour[3] ?? 255
+  }
+  fillColorCache.set(tileData, { colorVersion, colors })
+  return colors
+}
+
+function getSubLayerData(tileData: ArrowColumnarData, numRows: number) {
+  let cached = subLayerDataCache.get(tileData)
+  if (!cached || cached.length !== numRows) {
+    cached = { length: numRows }
+    subLayerDataCache.set(tileData, cached)
+  }
+  return cached
+}
+
 // Shared tile cache — survives layer replacement
 export const tileCache = new Map<string, ArrowColumnarData>()
 
 export interface ArrowH3TileLayerExternalProps {
-  getFillColor?: (value: number) => [number, number, number, number]
-  colorDomain?: [number, number]
+  getFillColor?: FillColorFn
+  colorVersion?: number
   onDataChange?: () => void
   loader?: 'arrow' | 'parquet'
   resBias?: number
@@ -78,7 +121,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       const indices = getCol(tileData, 'index')
       const values = getCol(tileData, 'value')
       if (indices && values && getNumRows(tileData) > 0) {
-        const raw = indices.at(0)
+        const raw = colAt(indices, 0)
         const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
         const res = h3.getResolution(idxStr)
         resCounts.set(res, (resCounts.get(res) ?? 0) + getNumRows(tileData))
@@ -95,7 +138,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     
     const filteredTiles = visibleTiles.filter((t: any) => {
       const indices = getCol(t.content, 'index')
-      const raw = indices?.at(0)
+      const raw = indices ? colAt(indices, 0) : undefined
       if (!raw) return false
       const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
       const res = h3.getResolution(idxStr)
@@ -118,7 +161,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
         
         const tile = filteredTiles[tileIdx];
         const localIdx = idx - tileOffsets[tileIdx];
-        return Number(getCol(tile.content, field)[localIdx]);
+        return Number(colAt(getCol(tile.content, field), localIdx));
       },
     };
   }
@@ -139,13 +182,13 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
       for (let i = 0; i < numRows; i++) {
         // Convert BigInt to hex string for comparison
-        const raw = indices.at(i) as unknown
+        const raw = colAt(indices, i) as unknown
         const idxStr = typeof raw === 'bigint' ? raw.toString(16) : String(raw)
         if (disk.has(idxStr)) {
           matchedIndices.push(idxStr)
-          const val = values.at(i)
+          const val = colAt(values, i)
           if (val !== undefined) matchedValues.push(Number(val))
-          const w = weights?.at(i)
+          const w = weights ? colAt(weights, i) : undefined
           matchedWeights.push(w !== undefined ? Number(w) : 1)
         }
       }
@@ -176,7 +219,7 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const { data, tile } = props
     const extProps = this.props as unknown as ArrowH3TileLayerExternalProps
     const getFillColor = extProps.getFillColor
-    const colorDomain = extProps.colorDomain
+    const { colorVersion = 0 } = extProps
 
     const h3Indices = getCol(data, 'index')
     const values = getCol(data, 'value')
@@ -184,23 +227,37 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
 
     if (!h3Indices || !values || numRows === 0) return null
 
+    const fillColors = getFillColor
+      ? getCachedFillColors(data, values, numRows, getFillColor, colorVersion)
+      : null
+    const dataWrap = getSubLayerData(data, numRows)
+    if (fillColors) {
+      dataWrap.attributes = {
+        getFillColor: { value: fillColors, size: 4, type: 'unorm8' },
+      }
+      dataWrap.startIndices = null
+    } else {
+      delete dataWrap.attributes
+      delete dataWrap.startIndices
+    }
+
     return new H3HexagonLayer({
       ...props,
       id: `${props.id}-${tile.index.i}`,
-      data: { length: numRows },
+      data: dataWrap,
 
       getHexagon: (_d: unknown, { index }: { index: number }) => {
-        const raw = h3Indices.at(index)!
+        const raw = colAt(h3Indices, index)!
         return typeof raw === 'bigint' ? raw.toString(16) : raw.toString()
       },
 
       getFillColor: getFillColor
-        ? (_d: unknown, { index }: { index: number }) => getFillColor(Number(values.at(index)!))
+        ? (_d: unknown, { index, target }: { index: number; target?: number[] }) => getFillColor(Number(colAt(values, index)!), target)
         : (_d: unknown, { index }: { index: number }) => [128, 128, 128, 255] as [number, number, number, number],
 
       updateTriggers: {
         getHexagon: [h3Indices],
-        getFillColor: [values, getFillColor, colorDomain],
+        getFillColor: [colorVersion, fillColors],
       },
       opacity: 1,
       extruded: false,
