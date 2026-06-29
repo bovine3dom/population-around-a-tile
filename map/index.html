@@ -73,6 +73,10 @@
             visibility: hidden;
         }
 
+        sl-drawer::part(base) {
+            z-index: 3;
+        }
+
         #top-controls {
             position: fixed;
             top: 10px;
@@ -83,15 +87,30 @@
             gap: 8px;
         }
 
+        #graphs-button {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+        }
+
+        .mobile-label {
+            display: none;
+        }
+
         #top-controls sl-input {
             width: min(20rem, calc(100vw - 110px));
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 767px) {
             #top-controls {
                 left: 10px;
             }
 
+            #graphs-button {
+                position: static;
+            }
+
+            #top-controls sl-input,
             #top-controls sl-dropdown {
                 flex: 1;
                 min-width: 0;
@@ -99,6 +118,14 @@
 
             #top-controls sl-input {
                 width: 100%;
+            }
+
+            .desktop-label {
+                display: none;
+            }
+
+            .mobile-label {
+                display: inline;
             }
         }
     </style>
@@ -174,12 +201,15 @@ why did you do this?
                 </sl-details>
             </div>
         </sl-drawer>
-        <sl-button size="small" onclick="document.getElementById('settings').show()">Graphs/faq</sl-button>
     </div>
     <div id="top-controls">
+        <sl-button id="graphs-button" size="small" aria-label="Graphs/faq"
+            onclick="document.getElementById('settings').show()"><span class="desktop-label">Graphs/faq</span><span
+                class="mobile-label">💹</span></sl-button>
         <sl-input id="city_search" size="small" type="search" placeholder="Fly to city" clearable></sl-input>
-        <sl-button id="settings-button" size="small"
-            onclick="document.getElementById('settings-drawer').show()">Settings</sl-button>
+        <sl-button id="settings-button" size="small" aria-label="Settings"
+            onclick="document.getElementById('settings-drawer').show()"><span class="desktop-label">Settings</span><span
+                class="mobile-label">⚙️</span></sl-button>
     </div>
     <sl-drawer contained="true" id="settings-drawer" label="Settings" placement="end">
         <sl-range id="resolution_modifier" data-param="res" label="Resolution"
