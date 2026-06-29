@@ -915,6 +915,14 @@ attributionEl.innerText =
 const citySearchEl = document.getElementById('city_search') as any
 const MAX_RESULTS = 20
 
+function formatCitySearchResult(city: { name?: string; population?: number }) {
+  const name = city.name ?? 'Unknown city'
+  if (typeof city.population !== 'number' || !Number.isFinite(city.population)) return name
+
+  const population = Number(city.population.toPrecision(2)).toLocaleString()
+  return `${name} (population: ${population})`
+}
+
 if (citySearchEl) {
   const dropdown = document.createElement('sl-dropdown') as any
   dropdown.containment = 'viewport'
@@ -929,25 +937,36 @@ if (citySearchEl) {
   const menu = document.createElement('sl-menu') as any
   dropdown.appendChild(menu)
 
-  function showResults(query: string) {
+  function renderResults(query: string) {
     const results = getCitiesStartsWith(query, MAX_RESULTS, true)
     menu.innerHTML = ''
     if (!results.length) {
-      dropdown.hide()
-      return
+      return false
     }
     for (const r of results) {
       const item = document.createElement('sl-menu-item') as any
-      item.textContent = r.name
+      item.textContent = formatCitySearchResult(r)
       item.addEventListener('click', () => {
-        citySearchEl.value = r.name
+        citySearchEl.value = r.name ?? ''
         dropdown.hide()
         map.flyTo({ center: [r.longitude!, r.latitude!], zoom: 12, duration: 1500 })
       })
       menu.appendChild(item)
     }
+    return true
+  }
+
+  function showResults(query: string) {
+    if (!renderResults(query)) {
+      dropdown.hide()
+      return
+    }
     dropdown.show()
   }
+
+  dropdown.addEventListener('sl-show', (e: Event) => {
+    if (!renderResults(citySearchEl.value ?? '')) e.preventDefault()
+  })
 
   citySearchEl.addEventListener('sl-input', () => {
     showResults(citySearchEl.value)
@@ -963,7 +982,7 @@ if (citySearchEl) {
       const results = getCitiesStartsWith(citySearchEl.value, 1, true)
       if (results.length > 0) {
         const r = results[0]
-        citySearchEl.value = r.name
+        citySearchEl.value = r.name ?? ''
         dropdown.hide()
         map.flyTo({ center: [r.longitude!, r.latitude!], zoom: 12, duration: 1500 })
       }
