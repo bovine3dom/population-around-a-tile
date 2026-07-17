@@ -1,5 +1,5 @@
 import { TileLayer, TileLayerProps, _Tile2DHeader as Tile2DHeader } from '@deck.gl/geo-layers'
-import type { AccessorContext } from '@deck.gl/core'
+import type { AccessorContext, FilterContext } from '@deck.gl/core'
 import { PackedH3FillTransition, PackedH3HexagonLayer } from 'faster-h3-for-deckgl'
 import { load } from '@loaders.gl/core'
 import { ArrowLoader } from '@loaders.gl/arrow'
@@ -49,9 +49,19 @@ type SubLayerData = {
   getFillColor?: FillColorFn
 }
 
+type TileFadeState = {
+  visible: boolean
+  targetOpacity: 0 | 1
+  retainUntil: number
+  hasLayer: boolean
+  enterPending: boolean
+}
+
+const TILE_FADE_DURATION = 300
 const DEFAULT_FILL_COLOR: [number, number, number, number] = [128, 128, 128, 255]
 const packedFillTransition = new PackedH3FillTransition()
 const subLayerDataCache = new WeakMap<ArrowColumnarData, SubLayerData>()
+const tileFadeStates = new WeakMap<Tile2DHeader<ArrowColumnarData>, TileFadeState>()
 
 function getPackedHexagon(_d: unknown, { data, index, target }: AccessorContext<unknown>) {
   const raw = colAt((data as SubLayerData).h3Indices, index)
@@ -76,6 +86,26 @@ function getSubLayerData(tileData: ArrowColumnarData, data: SubLayerData) {
   if (cached?.length === data.length) return Object.assign(cached, data)
   subLayerDataCache.set(tileData, data)
   return data
+}
+
+function updateTileFadeState(tile: Tile2DHeader<ArrowColumnarData>, now: number) {
+  let fade = tileFadeStates.get(tile)
+  if (!fade) {
+    fade = {
+      visible: tile.isVisible,
+      targetOpacity: 0,
+      retainUntil: 0,
+      hasLayer: false,
+      enterPending: tile.isVisible,
+    }
+    tileFadeStates.set(tile, fade)
+  } else if (fade.visible !== tile.isVisible) {
+    fade.visible = tile.isVisible
+    fade.enterPending = tile.isVisible && !fade.hasLayer
+    fade.targetOpacity = tile.isVisible && fade.hasLayer ? 1 : 0
+    fade.retainUntil = tile.isVisible ? 0 : now + TILE_FADE_DURATION
+  }
+  return fade
 }
 
 // Shared tile cache — survives layer replacement
@@ -109,6 +139,21 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       ...super._getTilesetOptions(),
       resBias
     }
+  }
+
+  getSubLayerPropsByTile(tile: Tile2DHeader<ArrowColumnarData>) {
+    const fade = updateTileFadeState(tile, this.context.timeline.getTime())
+    return {
+      opacity: this.props.opacity * fade.targetOpacity,
+      pickable: this.props.pickable && fade.visible && fade.targetOpacity > 0,
+    }
+  }
+
+  filterSubLayer(context: FilterContext) {
+    if (super.filterSubLayer(context)) return true
+    const tile = (context.layer.props as { tile?: Tile2DHeader<ArrowColumnarData> }).tile
+    const fade = tile && tileFadeStates.get(tile)
+    return Boolean(fade?.hasLayer && !fade.visible && this.context.timeline.getTime() < fade.retainUntil)
   }
 
   getSampler(): Sampler | null {
@@ -226,7 +271,29 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
     const values = getCol(data, 'value')
     const numRows = getNumRows(data)
 
-    if (!h3Indices || !values || numRows === 0) return null
+    if (!h3Indices || !values || numRows === 0) {
+      const fade = tileFadeStates.get(tile)
+      if (fade) {
+        fade.hasLayer = false
+        fade.targetOpacity = 0
+        fade.enterPending = fade.visible
+      }
+      return null
+    }
+
+    const fade = tileFadeStates.get(tile)
+    if (fade) {
+      fade.hasLayer = true
+      if (fade.enterPending) {
+        fade.enterPending = false
+        // Commit the new layer at opacity 0 before giving Deck a target to transition to.
+        requestAnimationFrame(() => {
+          if (!fade.visible || !tile.isVisible) return
+          fade.targetOpacity = 1
+          this.setNeedsUpdate()
+        })
+      }
+    }
 
     const dataWrap = getSubLayerData(data, { length: numRows, h3Indices, values, getFillColor })
 
@@ -235,13 +302,13 @@ export class ArrowH3TileLayer extends TileLayer<ArrowColumnarData> {
       id: `${props.id}-${tile.index.i}`,
       data: dataWrap,
       extensions: [...(props.extensions ?? []), packedFillTransition],
+      transitions: { ...(props.transitions ?? {}), opacity: TILE_FADE_DURATION },
       getHexagon: getPackedHexagon,
       getFillColor: getPackedFillColor,
       updateTriggers: {
         getHexagon: [h3Indices],
         getFillColor: [colorVersion, values, getFillColor],
       },
-      opacity: 1,
     })
   }
 
