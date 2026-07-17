@@ -63,6 +63,9 @@ let colourInverted = urlParams.get('ci') === '1'
 let useClickhouse = urlParams.get('ch') === '1'
 let freezeLegend = urlParams.get('freeze') === '1'
 const colourRamp = d3.scaleSequential<string>((d3s as any)[currentColourScheme]).domain(colourInverted ? [1, 0] : [0, 1])
+const INITIAL_LEGEND_MIN = 1
+const INITIAL_LEGEND_MAX = 10_000
+const INITIAL_LEGEND_LOG_RANGE = Math.log10(INITIAL_LEGEND_MAX / INITIAL_LEGEND_MIN)
 
 // Populate colour scheme dropdown (after Shoelace loads)
 customElements.whenDefined('sl-select').then(() => {
@@ -76,8 +79,11 @@ customElements.whenDefined('sl-select').then(() => {
     }
   }
 })
-let getQuantile: ((v: number) => number) | undefined
-let getValueFromQuantile: ((q: number) => number) | undefined
+let getQuantile = (value: number) => {
+  const clamped = Math.min(Math.max(value, INITIAL_LEGEND_MIN), INITIAL_LEGEND_MAX)
+  return Math.log10(clamped / INITIAL_LEGEND_MIN) / INITIAL_LEGEND_LOG_RANGE
+}
+let getValueFromQuantile = (quantile: number) => INITIAL_LEGEND_MIN * 10 ** (quantile * INITIAL_LEGEND_LOG_RANGE)
 let colourVersion = 0
 
 const COLOUR_PALETTE_SIZE = 1024
@@ -204,6 +210,16 @@ const staticquerygen = memoise(_staticquerygen)
 let legendElement: SVGSVGElement | null = null
 const attributionEl = document.getElementById('attribution')!
 
+function renderLegend(valueFromQuantile: (q: number) => number, tickValues?: number[]) {
+  const tickFormat = (quantile: number) => {
+    const rounded = parseFloat(valueFromQuantile(quantile).toPrecision(2))
+    return rounded.toLocaleString()
+  }
+  legendElement?.remove()
+  legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km²', tickFormat, tickValues })
+  attributionEl.insertBefore(legendElement, attributionEl.firstChild)
+}
+
 // Throttled legend update: fires immediately, then waits 500ms before next call
 let legendThrottleTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -290,7 +306,7 @@ let legendUpdateTimer: ReturnType<typeof setTimeout> | null = null
 function updateLegend(colourByWeights: boolean) {
   // Build ECDF
   const sampler = h3Layer.getSampler()
-  if (!sampler) return
+  if (!sampler || sampler.totalRows === 0) return
   const ecdf = buildEcdf(sampler, colourByWeights)
   getQuantile = ecdf.getQuantile
   getValueFromQuantile = ecdf.getValueFromQuantile
@@ -300,18 +316,7 @@ function updateLegend(colourByWeights: boolean) {
     clearTimeout(legendUpdateTimer)
   }
   legendUpdateTimer = setTimeout(() => {
-    // Re-render legend with quantile-based ticks
-    const tickFormat = (v: number) => {
-      const rawValue = ecdf.getValueFromQuantile(v)
-      const rounded = parseFloat(rawValue.toPrecision(2))
-      return rounded.toLocaleString()
-    }
-
-    if (legendElement) {
-      legendElement.remove()
-    }
-    legendElement = observablehq.legend({ color: colourRamp, title: 'Population per km²', tickFormat })
-    attributionEl.insertBefore(legendElement, attributionEl.firstChild)
+    renderLegend(ecdf.getValueFromQuantile)
   }, 1337)
 
   // Force re-render of hex layers
@@ -349,7 +354,7 @@ const genTileLayer = () => new ArrowH3TileLayer({
   maxZoom: 8,
   pickable: true,
   highPrecision: true,
-  getFillColor: getColour(getQuantile!),
+  getFillColor: getColour(getQuantile),
   colorVersion: colourVersion,
   onDataChange: scheduleTileDataColourUpdate,
   loader: LOADER,
@@ -981,6 +986,7 @@ attributionEl.innerText =
   [params.get('c'), 'bovine3dom', 'Mapterhorn', 'Versatiles', 'GEBCO\n', 'Natural Earth', 'Kontur', 'GHSL', 'OpenFreeMap\n', 'OpenStreetMap contributors']
     .filter((x) => x !== null)
     .join(' © ')
+renderLegend(getValueFromQuantile, [0, 0.25, 0.5, 0.75, 1])
 
 const citySearchEl = document.getElementById('city_search') as any
 const MAX_RESULTS = 20
