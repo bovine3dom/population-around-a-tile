@@ -13,6 +13,7 @@
         "d3-dsv": "^3.0.1",
         "d3-scale-chromatic": "^3.1.0",
         "deck.gl": "^9.0.14",
+        "faster-h3-for-deckgl": "https://github.com/bovine3dom/faster-h3-for-deckgl",
         "geokdbush": "^2.0.1",
         "h3-js": "^4.1.0",
         "http-server": "^14.1.1",
@@ -27,6 +28,9 @@
       },
     },
   },
+  "trustedDependencies": [
+    "faster-h3-for-deckgl",
+  ],
   "packages": {
     "@amcharts/amcharts5": ["@amcharts/amcharts5@5.14.4", "", { "dependencies": { "@types/d3": "^7.0.0", "@types/d3-chord": "^3.0.0", "@types/d3-hierarchy": "3.1.1", "@types/d3-sankey": "^0.11.1", "@types/d3-shape": "^3.0.0", "@types/geojson": "^7946.0.8", "@types/polylabel": "^1.0.5", "@types/svg-arc-to-cubic-bezier": "^3.2.0", "d3": "^7.0.0", "d3-chord": "^3.0.0", "d3-force": "^3.0.0", "d3-geo": "^3.0.0", "d3-hierarchy": "^3.0.0", "d3-sankey": "^0.12.3", "d3-selection": "^3.0.0", "d3-shape": "^3.0.0", "d3-transition": "^3.0.0", "d3-voronoi-treemap": "^1.1.2", "flatpickr": "^4.6.13", "markerjs2": "^2.29.4", "pdfmake": "^0.2.2", "polylabel": "^1.1.0", "seedrandom": "^3.0.5", "svg-arc-to-cubic-bezier": "^3.2.0", "tslib": "^2.2.0" } }, "sha512-Tl7wQLWvsvyWVtlCIm1yhZtJviSDYjuNTnlUkO0D49GyByoK0nb9fr0DK4rUw4DVgyLcySxWBsb2lzTJm5Rd9Q=="],
 
@@ -547,6 +551,8 @@
     "extend-shallow": ["extend-shallow@2.0.1", "", { "dependencies": { "is-extendable": "^0.1.0" } }, "sha512-zCnTtlxNoAiDc3gqY2aYAWFx7XWWiasuF2K8Me5WbN8otHKTUKBwjPtNpRs/rbUZm7KxWAaNj7P1a/p52GbVug=="],
 
     "fast-xml-parser": ["fast-xml-parser@4.5.6", "", { "dependencies": { "strnum": "^1.0.5" }, "bin": { "fxparser": "src/cli/cli.js" } }, "sha512-Yd4vkROfJf8AuJrDIVMVmYfULKmIJszVsMv7Vo71aocsKgFxpdlpSHXSaInvyYfgw2PRuObQSW2GFpVMUjxu9A=="],
+
+    "faster-h3-for-deckgl": ["faster-h3-for-deckgl@github:bovine3dom/faster-h3-for-deckgl#17d4e28", { "dependencies": { "earcut": "^2.2.4", "h3-js": "^4.4.0" }, "peerDependencies": { "@deck.gl/core": ">=9.0.14 <9.4.0", "@deck.gl/layers": ">=9.0.14 <9.4.0" } }, "bovine3dom-faster-h3-for-deckgl-17d4e28"],
 
     "fflate": ["fflate@0.7.4", "", {}, "sha512-5u2V/CDW15QM1XbbgS+0DfPxVB+jUKhWEKuuFuHncbk3tEEqzmoXL+2KyOFuKGqOnmdIy0/davWF1CkuwtibCw=="],
 
